@@ -1,0 +1,1344 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Stand-Up King!</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;image-rendering:pixelated;}
+html,body{background:#000;font-family:'Press Start 2P',monospace;overflow:hidden;height:100%;width:100%;}
+#G{width:100%;height:100vh;display:flex;flex-direction:column;}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+@keyframes slideup{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
+@keyframes wobble{0%,100%{transform:rotate(0)}25%{transform:rotate(-10deg)}75%{transform:rotate(10deg)}}
+@keyframes pop{0%,100%{transform:scale(1)}50%{transform:scale(1.07)}}
+@keyframes flashg{0%,100%{background:rgba(255,220,0,.18)}50%{background:rgba(255,220,0,.38)}}
+@keyframes flashr{0%,100%{background:rgba(220,0,0,.18)}50%{background:rgba(220,0,0,.38)}}
+@keyframes redglow{0%,100%{text-shadow:0 0 8px #f00}50%{text-shadow:0 0 24px #f66,0 0 48px #f00}}
+@keyframes timerPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.22)}}
+@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+@keyframes dance{0%,100%{transform:rotate(0) translateY(0)}25%{transform:rotate(-14deg) translateY(-5px)}75%{transform:rotate(14deg) translateY(-5px)}}
+@keyframes fall{0%{transform:rotate(0)}60%{transform:rotate(82deg) translateY(14px)}100%{transform:rotate(92deg) translateY(18px)}}
+@keyframes eventPulse{0%,100%{box-shadow:0 0 8px rgba(255,160,0,.4)}50%{box-shadow:0 0 22px rgba(255,200,0,.8),inset 0 0 10px rgba(255,180,0,.2)}}
+@keyframes edgyGlow{0%,100%{box-shadow:0 0 8px rgba(255,80,0,.4)}50%{box-shadow:0 0 20px rgba(255,100,0,.7),inset 0 0 8px rgba(255,60,0,.2)}}
+@keyframes jGlow{0%,100%{box-shadow:0 0 8px rgba(80,180,255,.4)}50%{box-shadow:0 0 20px rgba(80,200,255,.8),inset 0 0 8px rgba(80,160,255,.2)}}
+@keyframes crickets{0%,100%{transform:translateX(0)}10%,30%,50%,70%,90%{transform:translateX(-3px)}20%,40%,60%,80%{transform:translateX(3px)}}
+</style>
+</head>
+<body>
+<div id="G"></div>
+<script>
+// ════════════ AUDIO ════════════
+var _ac=null;
+function ac(){if(!_ac)_ac=new(window.AudioContext||window.webkitAudioContext)();if(_ac.state==='suspended')_ac.resume();return _ac;}
+function tn(f,d,tp,v,w){tp=tp||'square';v=v||.07;w=w||0;if(f<=0)return;try{var c=ac(),t=c.currentTime+w,o=c.createOscillator(),g=c.createGain();o.connect(g);g.connect(c.destination);o.type=tp;o.frequency.value=f;g.gain.setValueAtTime(v,t);g.gain.exponentialRampToValueAtTime(.0001,t+d);o.start(t);o.stop(t+d+.06);}catch(e){}}
+function nz(d,v,w,type){v=v||.2;w=w||0;try{var c=ac(),t=c.currentTime+w,sr=c.sampleRate,b=c.createBuffer(1,Math.ceil(sr*d),sr),dt=b.getChannelData(0);for(var i=0;i<dt.length;i++)dt[i]=(Math.random()*2-1)*(type==='fade'?1-i/dt.length:1);var s=c.createBufferSource(),g=c.createGain();s.buffer=b;g.gain.value=v;s.connect(g);g.connect(c.destination);s.start(t);s.stop(t+d);}catch(e){}}
+
+// ══ JAZZ SEQUENCER — Seinfeld / Roger Rabbit style ══
+// Tempo system: base beat, hot streak speeds it up
+var _bt=null,_bp=0,_bi=0,_bm='off',_tempo=1.0;
+
+// JAZZ THEME — D minor/Dorian, chromatic walks, blue notes
+// Each entry: [freq_hz, duration_beats, type, vol]  type: 'm'=melody 'b'=bass 's'=stab
+// Beat unit = 0.13s (swinging quarter note at ~115bpm)
+var BEAT=0.13; // base beat duration — modified by tempo
+
+// Melody line — Seinfeld-ish: short staccato phrases, chromatic slides, question marks
+var JZ_MEL=[
+  // phrase 1: rising chromatic question
+  [294,1.5,'m',.045],[311,0.5,'m',.04],[330,1,'m',.05],[0,0.5,'m',0],
+  [349,1,'m',.052],[370,0.5,'m',.04],[392,1.5,'m',.055],[0,0.5,'m',0],
+  // phrase 2: answer — descends with swing
+  [370,0.5,'m',.042],[349,0.5,'m',.04],[330,1,'m',.048],[311,0.5,'m',.038],
+  [294,2,'m',.05],[0,1,'m',0],
+  // phrase 3: offbeat stabs (Roger Rabbit style)
+  [0,0.5,'m',0],[440,0.5,'m',.055],[0,0.5,'m',0],[415,0.5,'m',.05],
+  [0,0.5,'m',0],[392,0.5,'m',.05],[370,1,'m',.048],[0,0.5,'m',0],
+  // phrase 4: chromatic descent with blue note (Bb)
+  [466,1,'m',.05],[440,0.5,'m',.045],[415,0.5,'m',.042],[392,1,'m',.05],
+  [370,0.5,'m',.042],[349,0.5,'m',.04],[330,2,'m',.052],[0,1,'m',0],
+  // phrase 5: punchline riff (the "dundun dundundun" feel)
+  [294,0.5,'m',.06],[294,0.5,'m',.055],[0,0.5,'m',0],[294,0.5,'m',.06],
+  [349,0.5,'m',.055],[370,0.5,'m',.05],[392,1,'m',.06],[0,0.5,'m',0],
+  [415,0.5,'m',.058],[440,1,'m',.06],[0,0.5,'m',0],[415,0.5,'m',.05],
+  [392,2,'m',.055],[0,2,'m',0],
+];
+
+// Bass line — walking chromatic, slap feel (very short durations)
+var JZ_BAS=[
+  // bars 1-2: D pedal with chromatic walk up
+  [147,0.6,'b',.05],[0,0.4,'b',0],[165,0.6,'b',.048],[0,0.4,'b',0],
+  [175,0.6,'b',.052],[0,0.4,'b',0],[185,0.6,'b',.05],[0,0.4,'b',0],
+  [196,0.6,'b',.055],[0,0.4,'b',0],[208,0.5,'b',.048],[0,0.5,'b',0],
+  [220,1,'b',.052],[0,1,'b',0],
+  // bars 3-4: walk down chromatic (Wolff style)
+  [220,0.6,'b',.05],[0,0.4,'b',0],[208,0.6,'b',.048],[0,0.4,'b',0],
+  [196,0.6,'b',.05],[0,0.4,'b',0],[185,0.5,'b',.048],[0,0.5,'b',0],
+  [175,0.6,'b',.05],[0,0.4,'b',0],[165,0.5,'b',.048],[0,0.5,'b',0],
+  [155,0.6,'b',.05],[0,0.4,'b',0],[147,1,'b',.055],[0,1,'b',0],
+  // bars 5-6: IV chord approach (G) + offbeats
+  [0,0.5,'b',0],[196,0.5,'b',.055],[0,0.5,'b',0],[196,0.5,'b',.05],
+  [208,0.6,'b',.048],[0,0.4,'b',0],[220,0.6,'b',.052],[0,0.4,'b',0],
+  [233,0.6,'b',.05],[247,0.6,'b',.048],[261,1,'b',.055],[0,1,'b',0],
+  // bars 7-8: turnaround A7→Dm
+  [220,0.6,'b',.05],[0,0.4,'b',0],[233,0.5,'b',.048],[0,0.5,'b',0],
+  [247,0.6,'b',.05],[0,0.4,'b',0],[220,0.5,'b',.052],[0,0.5,'b',0],
+  [208,0.6,'b',.05],[0,0.4,'b',0],[196,0.6,'b',.048],[0,0.4,'b',0],
+  [175,0.6,'b',.05],[0,0.4,'b',0],[147,2,'b',.058],[0,2,'b',0],
+];
+
+// Off-beat chord stabs (the "squiggle" sound from Seinfeld)
+var JZ_STAB=[
+  // hits on the "and" of beats — very short, higher register
+  [0,2,'s',0],[587,0.2,'s',.025],[0,1.8,'s',0],
+  [0,1.5,'s',0],[554,0.2,'s',.022],[0,2.3,'s',0],
+  [0,1,'s',0],[523,0.2,'s',.024],[0,0.8,'s',0],[554,0.2,'s',.02],[0,1.8,'s',0],
+  [0,2,'s',0],[587,0.2,'s',.025],[0,1.8,'s',0],
+  [0,1.5,'s',0],[622,0.2,'s',.022],[0,2.3,'s',0],
+  [0,0.8,'s',0],[587,0.2,'s',.02],[0,0.6,'s',0],[622,0.2,'s',.02],[0,1.2,'s',0],
+  [0,3,'s',0],[659,0.3,'s',.028],[0,4.7,'s',0],
+  [0,1.5,'s',0],[587,0.2,'s',.022],[0,0.5,'s',0],[622,0.2,'s',.02],[0,1.6,'s',0],
+];
+
+// BOSS battle theme — tense, chromatic, repetitive dread
+var BS_MEL=[
+  [110,.12],[110,.12],[0,.06],[165,.2],[0,.06],[110,.12],[0,.06],
+  [147,.28],[110,.14],[0,.06],[130,.2],[0,.06],[110,.14],[0,.06],
+  [98,.28],[0,.06],[98,.14],[98,.14],[0,.06],[147,.2],[0,.06],
+  [131,.14],[0,.06],[123,.2],[0,.06],[110,.38],[0,.14],
+];
+var BS_BAS=[
+  [55,.12],[55,.12],[0,.06],[82,.2],[0,.06],[55,.12],[0,.06],
+  [73,.28],[55,.14],[0,.06],[65,.2],[0,.06],[55,.14],[0,.06],
+  [49,.28],[0,.06],[49,.14],[49,.14],[0,.06],[73,.2],[0,.06],
+  [65,.14],[0,.06],[61,.2],[0,.06],[55,.38],[0,.14],
+];
+
+// Jazz sequencer — plays melody, bass, stabs on separate independent pointers
+var _bpM=0,_bpB=0,_bpS=0, _biM=0,_biB=0,_biS=0;
+var _bpBoss=0,_biBoss=0;
+
+function _sc(){
+  var c=ac();
+  var b=BEAT/_tempo; // beat duration scaled by tempo
+
+  if(_bm==='boss'){
+    // Boss: simple two-voice
+    while(_bpBoss<c.currentTime+2){
+      var m=BS_MEL[_biBoss%BS_MEL.length];
+      var b2=BS_BAS[_biBoss%BS_BAS.length];
+      var dt=_bpBoss-c.currentTime;
+      if(m[0]>0)tn(m[0],m[1]*.8*_tempo,'square',.055,dt);
+      if(b2[0]>0)tn(b2[0],b2[1]*.8*_tempo,'triangle',.032,dt);
+      _bpBoss+=m[1]*BEAT;_biBoss++;
+    }
+  } else {
+    // Jazz: three voices — melody, bass, stabs
+    while(_bpM<c.currentTime+2){
+      var en=JZ_MEL[_biM%JZ_MEL.length];
+      var dt=_bpM-c.currentTime;
+      if(en[0]>0){
+        // Melody: square wave for 8-bit feel, shorter for staccato
+        var dur=Math.max(0.02, en[1]*b*0.7);
+        tn(en[0],dur,'square',en[3]*1.1,dt);
+        // Add subtle harmony a minor third above occasionally for richness
+        if(_biM%8===3&&en[0]>0)tn(en[0]*1.189,dur*.8,'square',en[3]*.35,dt);
+      }
+      _bpM+=en[1]*b; _biM++;
+    }
+    while(_bpB<c.currentTime+2){
+      var en2=JZ_BAS[_biB%JZ_BAS.length];
+      var dt2=_bpB-c.currentTime;
+      if(en2[0]>0){
+        // Bass: triangle for warmth, very staccato
+        var dur2=Math.max(0.02, en2[1]*b*0.55);
+        tn(en2[0],dur2,'triangle',en2[3]*1.2,dt2);
+        // Occasional octave doubling for punch
+        if(_biB%6===0)tn(en2[0]*2,dur2*.6,'square',en2[3]*.3,dt2);
+      }
+      _bpB+=en2[1]*b; _biB++;
+    }
+    while(_bpS<c.currentTime+2){
+      var en3=JZ_STAB[_biS%JZ_STAB.length];
+      var dt3=_bpS-c.currentTime;
+      if(en3[0]>0){
+        // Stabs: sine wave, very brief — the "squiggle" notes
+        tn(en3[0],en3[1]*b*0.5,'sine',en3[3]*1.3,dt3);
+        // add a higher partial for brightness
+        tn(en3[0]*1.5,en3[1]*b*0.3,'sine',en3[3]*.4,dt3);
+      }
+      _bpS+=en3[1]*b; _biS++;
+    }
+  }
+  _bt=setTimeout(_sc, 500);
+}
+
+function bgStart(m){
+  bgStop();_bm=m;
+  var t=ac().currentTime+.06;
+  _bpM=t;_bpB=t;_bpS=t;_bpBoss=t;
+  _biM=0;_biB=0;_biS=0;_biBoss=0;
+  _sc();
+}
+function bgStop(){if(_bt){clearTimeout(_bt);_bt=null;}}
+function bgSetTempo(t){_tempo=Math.max(0.6,Math.min(2.0,t));}
+
+
+// ═══ RICH SFX ═══
+var SFX={
+  talk:function(){
+    for(var i=0;i<14;i++)tn(160+Math.random()*270,.065,'square',.058,i*.08+Math.random()*.018);
+  },
+
+  // CLAPS — 3 varieties
+  clap:function(){
+    // Variant picked randomly for variety
+    var v=Math.floor(Math.random()*3);
+    if(v===0){
+      // Polite scattered clap
+      for(var i=0;i<6;i++){nz(.07,.18+Math.random()*.06,i*.16,'fade');nz(.04,.12,i*.16+.06,'fade');}
+    }else if(v===1){
+      // Enthusiastic clap burst
+      for(var i=0;i<9;i++){nz(.08,.26,i*.11,'fade');if(i%2===0)nz(.04,.1,i*.11+.04,'fade');}
+    }else{
+      // Slow building clap
+      for(var i=0;i<5;i++){var t=i*.22;nz(.09,.2,t,'fade');nz(.05,.14,t+.08,'fade');}
+    }
+  },
+  bigClap:function(){
+    // Stadium-level applause
+    for(var i=0;i<16;i++){nz(.08,.22+Math.random()*.08,i*.06+Math.random()*.02,'fade');if(i%3===0)nz(.05,.12,i*.06+.03,'fade');}
+    setTimeout(function(){for(var i=0;i<12;i++)nz(.07,.2,i*.07,'fade');},400);
+  },
+
+  // BOOS — 3 varieties
+  boo:function(){
+    var v=Math.floor(Math.random()*3);
+    if(v===0){
+      // Classic boo
+      [280,255,225,205,185,175].forEach(function(f,i){tn(f,.22,'sawtooth',.065,i*.15);});
+    }else if(v===1){
+      // Rumbling groan
+      [220,200,180,160,140].forEach(function(f,i){tn(f,.3,'sawtooth',.07,i*.12);});
+      tn(110,.5,'sawtooth',.04,.3);
+    }else{
+      // Sharp hiss + boo combo
+      nz(.15,.12,0,'fade');
+      [260,230,200,170].forEach(function(f,i){tn(f,.28,'sawtooth',.06,i*.14+.1);});
+    }
+  },
+  bigBoo:function(){
+    // Crowd revolt
+    [300,270,240,210,180,160,140].forEach(function(f,i){tn(f,.28,'sawtooth',.09,i*.1);});
+    setTimeout(function(){nz(.4,.22,0,'fade');},200);
+    setTimeout(function(){[220,190,160].forEach(function(f,i){tn(f,.3,'sawtooth',.07,i*.12);});},500);
+  },
+
+  // LAUGH — 3 varieties
+  laugh:function(){
+    var v=Math.floor(Math.random()*3);
+    if(v===0){[330,400,480,550,480,400].forEach(function(f,i){tn(f,.14,'sine',.072,i*.14);});}
+    else if(v===1){
+      // Staggered chuckle wave
+      [320,380,440,500,440].forEach(function(f,i){tn(f,.12,'sine',.06,i*.18);});
+      setTimeout(function(){[340,400,460].forEach(function(f,i){tn(f,.14,'sine',.07,i*.16);});},400);
+    }else{
+      // Short sharp laughs
+      for(var i=0;i<4;i++){[380,460,520].forEach(function(f,j){tn(f,.08,'sine',.08,i*.25+j*.04);});}
+    }
+  },
+  biglaugh:function(){
+    [310,390,470,550,630,550,470].forEach(function(f,i){tn(f,.16,'sine',.1,i*.1);});
+    for(var i=0;i<3;i++)tn(190+i*70,.22,'triangle',.05,i*.16);
+    setTimeout(function(){SFX.bigClap();},600);
+  },
+
+  // GROAN — crowd "ohhhh" for dud jokes
+  groan:function(){
+    [200,190,180,170,160].forEach(function(f,i){tn(f,.4,'sawtooth',.05,i*.08);});
+    setTimeout(function(){nz(.3,.08,0,'fade');},300);
+  },
+
+  // CRICKETS (silence / dead) — chirp SFX
+  crickets:function(){
+    // High staccato chirps
+    for(var i=0;i<6;i++){
+      var t=i*.35+Math.random()*.1;
+      tn(3800+Math.random()*400,.03,'square',.022,t);
+      tn(3600+Math.random()*400,.03,'square',.018,t+.04);
+      tn(3700+Math.random()*400,.03,'square',.02,t+.08);
+    }
+  },
+
+  // GESTURE SOUNDS
+  gestureMic:function(){nz(.08,.15,0,'fade');tn(200,.1,'square',.04,.1);},  // mic tap
+  gestureStep:function(){nz(.12,.2,0,'fade');nz(.08,.15,.14,'fade');},        // footstep
+  gestureWater:function(){
+    tn(800,.04,'sine',.04,0);tn(700,.04,'sine',.03,.05);tn(600,.04,'sine',.03,.1);
+    nz(.06,.08,.15,'fade');
+  },
+  gestureCard:function(){  // card flick
+    for(var i=0;i<5;i++)nz(.04,.12,i*.06,'fade');
+  },
+  gestureWhoosh:function(){  // something thrown / falling
+    tn(440,.05,'sawtooth',.05,0);tn(300,.12,'sawtooth',.06,.05);nz(.08,.18,.1,'fade');
+  },
+
+  edgygood:function(){[440,523,659,784,1047].forEach(function(f,i){tn(f,.15,'square',.09,i*.09);});setTimeout(function(){SFX.biglaugh();},250);},
+  edgybad:function(){[523,466,440,392,349,330].forEach(function(f,i){tn(f,.24,'sawtooth',.09,i*.12);});setTimeout(function(){SFX.bigBoo();},250);},
+  win:function(){[220,330,440,550,660,880].forEach(function(f,i){tn(f,.13,'square',.09,i*.09);});setTimeout(function(){SFX.biglaugh();},550);},
+  gameover:function(){[290,245,195,145,95].forEach(function(f,i){tn(f,.32,'sawtooth',.11,i*.28);});},
+  tick:function(t){if(t<=3)tn(t===1?1047:880,.055,'square',.045);},
+  penalty:function(){tn(200,.15,'sawtooth',.1);tn(150,.15,'sawtooth',.08,.18);},
+  alarm:function(){for(var i=0;i<8;i++){tn(880,.1,'square',.08,i*.22);tn(660,.1,'square',.06,i*.22+.11);}},
+  ringtone:function(){[523,523,0,523,523,0,523,659].forEach(function(f,i){if(f)tn(f,.12,'square',.07,i*.14);});},
+  cough:function(){nz(.12,.3,0,'fade');nz(.14,.3,.18,'fade');nz(.1,.25,.36,'fade');},
+  choke:function(){nz(.08,.2,0,'fade');nz(.18,.3,.12,'fade');tn(200,.2,'sawtooth',.04,.5);},
+  fight:function(){nz(.06,.35,0,'fade');nz(.06,.35,.12,'fade');SFX.bigBoo();},
+  fart:function(){try{var c=ac(),now=c.currentTime,o=c.createOscillator(),g=c.createGain();o.type='sawtooth';o.frequency.setValueAtTime(120,now);o.frequency.exponentialRampToValueAtTime(40,now+.6);g.gain.setValueAtTime(.18,now);g.gain.exponentialRampToValueAtTime(.0001,now+.65);o.connect(g);g.connect(c.destination);o.start(now);o.stop(now+.7);nz(.6,.15,.1,'fade');}catch(e){}},
+  magic:function(){[523,659,784,1047,784,659,523].forEach(function(f,i){tn(f,.12,'sine',.09,i*.09);});SFX.gestureCard();},
+  dance:function(){[262,330,392,523,392,330,262].forEach(function(f,i){tn(f,.1,'square',.07,i*.1);});SFX.gestureStep();},
+  trip:function(){SFX.gestureWhoosh();setTimeout(function(){nz(.2,.25,0,'fade');},400);setTimeout(function(){SFX.bigBoo();},600);},
+  propose:function(){[523,659,784,1047].forEach(function(f,i){tn(f,.2,'sine',.1,i*.15);});setTimeout(function(){SFX.biglaugh();},700);}
+};
+
+// ════════════ DATA ════════════
+var JOKES=[
+  // GOOD
+  {id:'j1',text:"I told my dog he was adopted.\nHe didn't look up from his phone.",type:'good'},
+  {id:'j2',text:"My wife says I never listen.\nAt least... I think that's what she said.",type:'good'},
+  {id:'j3',text:"I'm writing a book on reverse psychology.\nPlease, PLEASE don't buy it.",type:'good'},
+  {id:'j4',text:"I used to hate facial hair. Then it grew on me.",type:'good'},
+  {id:'j5',text:"My therapist says I can't let go of the past.\nWe'll see about THAT.",type:'good'},
+  {id:'j6',text:"Anti-gravity books are impossible to put down.",type:'good'},
+  {id:'j7',text:"I broke my arm in two places.\nDoc said stop going to those places.",type:'good'},
+  {id:'j8',text:"Why can't you give Elsa a balloon? She'll let it go.",type:'good'},
+  {id:'j9',text:"A skeleton walks into a bar. Orders a beer and a mop.",type:'good'},
+  {id:'j10',text:"I failed math so many times I can't even count.",type:'good'},
+  {id:'j11',text:"My house is haunted — not by ghosts. Just by regret.",type:'good'},
+  {id:'j12',text:"I asked which machine impresses women.\nHe pointed at the ATM.",type:'good'},
+  {id:'j13',text:"I'm on a seafood diet. I see food, I eat it.",type:'good'},
+  {id:'j14',text:"I told my cat a joke. She judged me. Nothing changed.",type:'good'},
+  // NEW JOKES
+  {id:'j15',text:"I bought a dictionary. Got home, found all pages blank.\nI have no words for it.",type:'good'},
+  {id:'j16',text:"I used to be indecisive.\nNow I'm not so sure.",type:'good'},
+  {id:'j17',text:"My doctor said I need to watch my drinking.\nSo I moved to a bar with better lighting.",type:'good'},
+  {id:'j18',text:"I told my wife she should embrace her mistakes.\nShe gave me a hug.",type:'good'},
+  {id:'j19',text:"My friend said he knows a great joke about\nconstruction. He's still working on it.",type:'good'},
+  {id:'j20',text:"I asked a librarian if they had books on paranoia.\nShe whispered: 'they're right behind you.'",type:'good'},
+  {id:'j21',text:"My friend has a great poker face.\nUnfortunately his poker hands are terrible.",type:'good'},
+  {id:'j22',text:"I told my boss I needed a raise.\nHe said the company was already giving me enough hot air.",type:'good'},
+  {id:'j23',text:"My therapist said time heals all wounds.\nMy dad said it was Neosporin.\nI trust my dad more.",type:'good'},
+  {id:'j24',text:"I put my phone on airplane mode.\nStill didn't fly. Zero stars.",type:'flat'},
+  // FLAT (minimal effect)
+  {id:'f1',text:"So... airlines. Those are a thing.",type:'flat'},
+  {id:'f2',text:"My neighbor waves every morning.\nI think he's my neighbor.",type:'flat'},
+  {id:'f3',text:"I bought new shoes last week. They're shoes.",type:'flat'},
+  {id:'f4',text:"Traffic exists. I was in some. That's the whole thing.",type:'flat'},
+  {id:'f5',text:"I had cereal for breakfast. ...Anyway.",type:'flat'},
+  {id:'f6',text:"Elevators go up, they go down.\nSometimes you're in them.",type:'flat'},
+  {id:'f7',text:"Daylight saving time — still happening apparently.",type:'flat'},
+  {id:'f8',text:"I ordered food online. It showed up.\nThat was my Wednesday.",type:'flat'},
+  // DUD — never lands, always negative (small, never more than -3)
+  {id:'dud',text:"So I was thinking — and hear me out —\nwhat if we just... nah. Never mind.",type:'dud'},
+  // POLITICAL
+  {id:'p1',text:"Politicians are like diapers —\nchange often, same reason.",type:'political'},
+  {id:'p2',text:"Congress passed a bill last week.\nDon't worry — they didn't read it either.",type:'political'},
+  {id:'p3',text:"My candidate promised to fix everything in 100 days.\nDay 1: nothing. Day 100: golf.",type:'political'},
+  {id:'p4',text:"Both parties finally agreed on something!\nThat they disagree on everything.",type:'political'},
+  {id:'p5',text:"A senator promised to lower taxes.\nThe crowd cheered. The accountants wept.",type:'political'},
+  {id:'p6',text:"The Senate is working on a compromise.\nMeaning nobody wins except the lobbyists.",type:'political'},
+];
+var CROWD=[
+  "Where's everyone from tonight?\nDoesn't matter — I'll mock you anyway.",
+  "How many are married?\nHow many are HAPPY? Different hands!",
+  "Anyone love their job?\n...Nobody? Yeah. That tracks.",
+  "Anyone on a first date?\nThis night is already a red flag.",
+  "It's a Tuesday. Real commitment to bad decisions.",
+  "Someone here drives a minivan. I respect the defeat.",
+];
+// ONE-LINERS — including the new ones
+var OL=[
+  "I'm not lazy. I'm on energy-saving mode.",
+  "My GPS says 'recalculating.' Same, honestly.",
+  "I finally got my life together. Then I dropped it.",
+  "Airplane mode — still didn't fly.",
+  "My bed is where I remember everything I forgot to do.",
+  "I asked Siri for directions.\nShe said 'I don't know your life.'",
+  // NEW ONE-LINERS
+  "I had dinner at Subway...\nbefore I got hit by the train.",
+  "Take my wife...\nphysically.",
+  "Sorry I was late. I died.",
+  "My mom didn't trust me with money.\nLast week.",
+  "My dad used to change my diapers.\nIt was last Tuesday.",
+  "What do you call cheese that isn't yours?\nNacho cheese.",
+];
+var EDGY_L=[
+  "I tried meditation for my anxiety.\nNow I calmly watch everything fall apart.",
+  "My dating profile says emotionally available.\nMost fiction I've ever written.",
+  "Talking to yourself normal?\nOnly if you get good advice. I don't.",
+  "Sleeping on it and avoiding it\nlook exactly the same from outside.",
+];
+var INSULTS=[
+  "Sir, I've seen better behavior\nfrom a Roomba having a seizure. SIT. DOWN.",
+  "ONE of us gets paid to embarrass himself.\nIT IS NOT YOU.",
+  "Your fashion sense is a five-alarm fire.\nSECURITY!",
+  "I respect the effort. That's the ONLY\nthing I respect about you.",
+  "Drunk or naturally insufferable? Either way — GET OUT.",
+];
+var CALLBACKS=[
+  "*gestures back to earlier*\nAnd THAT is exactly what I was talking about.",
+  "*circles back*\nSee — it all connects.\nLike I said earlier. Still true.",
+  "*references earlier bit*\nI just want you to know\nthat joke was intentional.",
+  "*calls back to the opener*\nAnd the dog? Still looking at his phone.",
+];
+var STALLS=[
+  "*adjusts mic stand unnecessarily*\nSorry, just... let me...\n...okay. Where was I.",
+  "*takes a very long sip of water*\n...good water. Great water actually. Anyway.",
+  '"Uhhhh..." *checks notes that don\'t exist*\nYep. Still nothing.',
+];
+var SPECIALS=[
+  {id:'fart',name:'Pass the Gas',emoji:'💨',lines:["*passes gas into the mic*\n...I'm gonna own that.","*the mic picks up everything*\nNow we've all been through something together."],sfx:function(){SFX.fart();},delta:function(){return Math.random()>.45?18+~~(Math.random()*20):-20-~~(Math.random()*15);},react:function(d){return d>0?'laughing':'booing';}},
+  {id:'dance',name:'Dance on Stage',emoji:'🕺',lines:["*breaks into full dance routine*\nI've been practicing that for YEARS.","*does the worm*\nI nailed THAT. Jokes? Not so much."],sfx:function(){SFX.dance();},delta:function(){return Math.random()>.40?22+~~(Math.random()*22):-12-~~(Math.random()*12);},react:function(d){return d>0?'laughing':'clapping';}},
+  {id:'propose',name:'Propose to Audience',emoji:'💍',lines:["*gets on one knee to stranger*\n...will you validate my parking?","*pulls out ring pop*\nNot the right moment. Here we are."],sfx:function(){SFX.propose();},delta:function(){return Math.random()>.35?26+~~(Math.random()*24):-8-~~(Math.random()*10);},react:function(d){return d>0?'laughing':'clapping';}},
+  {id:'trip',name:'Trip and Fall',emoji:'🤸',lines:["*trips over the mic stand*\n...I meant to do that.","*eats the stage floor*\nThe floor is comfortable. I live here now."],sfx:function(){SFX.trip();},delta:function(){return Math.random()>.50?20+~~(Math.random()*18):-22-~~(Math.random()*16);},react:function(d){return d>0?'laughing':'booing';}},
+  {id:'magic',name:'Magic Trick',emoji:'🪄',lines:["*produces coin from audience member's ear*\n...that was YOUR quarter.","*card trick fails, cards everywhere*\nThe trick is called 'Chaos.'"],sfx:function(){SFX.magic();},delta:function(){return Math.random()>.42?24+~~(Math.random()*22):-14-~~(Math.random()*14);},react:function(d){return d>0?'clapping':'booing';}},
+  {id:'alarm',name:'Fire Alarm',emoji:'🚨',lines:["*fire alarm blares through the venue*\nStay calm. I am also not calm.","*alarm sounds*\nThis is either a drill or my career ending.\nI genuinely can't tell."],sfx:function(){SFX.alarm();},delta:function(){return Math.random()>.3?-18-~~(Math.random()*14):8+~~(Math.random()*10);},react:function(d){return d>0?'laughing':'booing';}},
+  {id:'fight',name:'Audience Fight',emoji:'🥊',lines:["*two audience members start arguing*\nAnd THAT is why I don't take requests.","*chaos in row three*\nWhoever wins gets to heckle me next. Fair deal."],sfx:function(){SFX.fight();},delta:function(){return Math.random()>.5?12+~~(Math.random()*16):-16-~~(Math.random()*14);},react:function(d){return d>0?'laughing':'booing';}},
+  {id:'cough',name:'Coughing Fit',emoji:'😤',lines:["*uncontrollable coughing*\n...I'm fine. The joke was worse anyway.","*coughs for an uncomfortable amount of time*\nMy doctor said don't do stand-up.\nHe may have been right."],sfx:function(){SFX.cough();},delta:function(){return Math.random()>.55?10+~~(Math.random()*12):-14-~~(Math.random()*12);},react:function(d){return d>0?'laughing':'neutral';}},
+  {id:'choke',name:'Choke on Water',emoji:'💦',lines:["*takes sip of water, chokes spectacularly*\nI do this at home too. Alone.","*water goes everywhere*\nThat's the bit. That WAS the bit."],sfx:function(){SFX.choke();},delta:function(){return Math.random()>.5?14+~~(Math.random()*14):-12-~~(Math.random()*12);},react:function(d){return d>0?'laughing':'booing';}},
+  {id:'phone',name:'Cell Phone Rings',emoji:'📱',lines:["*phone rings loudly mid-punchline*\n'My mom. I'll call her back.'\n...She texted. She agrees with me.","*ringtone fills the room*\nIf that's my agent — great timing.\nIf it's spam — same energy."],sfx:function(){SFX.ringtone();},delta:function(){return Math.random()>.48?16+~~(Math.random()*14):-10-~~(Math.random()*12);},react:function(d){return d>0?'laughing':'booing';}}
+];
+var REVIEWS={S:["That was the GREATEST SET\nthis club has ever seen.\nBooked for New Year's Eve.\nFor the next DECADE."],A:["Outstanding! You owned that crowd.\nYour name goes on the MARQUEE."],B:["Solid set! Great moments in there.\nTiming was sharp. Regular spot is yours."],C:["Not bad. Some laughs, some crickets.\nKeep writing material."],D:["Look... it was rough.\nThe crowd was patient.\nTry an open mic first."],F:["I need a drink. I don't drink.\nWhat was THAT? Take. A. Class."]};
+
+// ════════════ STATE ════════════
+// DUAL METER SYSTEM:
+//   laugh   0-100 : rises with funny jokes, falls when jokes bomb
+//   engage  0-100 : multiplier on laugh changes; drops faster on stalls/missed turns
+//   When laugh hits 100 -> score bonus, laugh resets to 65, stars++
+//   Game over when engage hits 0
+var S={
+  screen:'start',
+  laugh:40,
+  engage:60,
+  score:0,
+  stars:0,
+  jokes:0,eu:false,
+  timer:10,acting:false,msg:'',mT:null,
+  react:'neutral',heck:false,
+  log:[],grade:'',review:'',
+  flash:null,fT:null,pressed:null,sa:null,
+  usedJokes:{},actionStreak:[],
+  penaltyMsg:'',penaltyT:null,
+  jokeLog:[],
+  pendingEvent:null,
+  customJoke:null,
+  showCustomInput:false,
+  heckPending:false,
+  round:0,
+  goodStreak:0,      // consecutive positive laugh outcomes
+  streakActive:false, // hot streak mode (goodStreak >= 3)
+  lastActTime:0,       // timestamp of last action (for speed bonus/mellow)
+  badStreak:0,         // consecutive negative laugh outcomes
+  goodConsec:0,        // consecutive good jokes (for TV deal check)
+  specialScreen:null,   // 'legend'|'paparazzi'|'tvdeal'|'pulledoffstage'|'kanye'|'naked'|'nextcomedian'|'dog'|null
+  hint:null,            // {action:'joke'|'crowd'|'oneliner'|'edgy', text:str} or null
+  turnCount:0,          // total turns taken
+  needsPee:false,       // pee mechanic active
+  peeCountdown:0,       // moves left before accident (2-3)
+  peeResult:null        // 'accident_boo'|'accident_win' (set when countdown hits 0)
+};
+var _ti=null;
+
+function engMult(){return 0.25+(S.engage/100)*1.5;}
+
+// ═══ HOT STREAK ═══
+// Called after each action resolves. ld = actual laugh delta applied.
+function updateStreak(ld){
+  if(ld>0){
+    S.goodStreak++;S.goodConsec++;S.badStreak=0;
+    if(S.goodStreak>=3&&!S.streakActive){
+      S.streakActive=true;
+      bgSetTempo(1.55);
+      S.penaltyMsg='🔥 HOT STREAK! KEEP IT GOING!';
+      clearTimeout(S.penaltyT);
+      S.penaltyT=setTimeout(function(){S.penaltyMsg='';render();},2800);
+    } else if(S.goodStreak>=3){
+      bgSetTempo(1.55);
+    }
+    // 4 good in a row — 12.5% TV deal
+    if(S.goodConsec>=4&&Math.random()<0.125){
+      S.acting=false;
+      setTimeout(function(){triggerSpecial('tvdeal');},600);
+      return;
+    }
+  } else {
+    S.goodStreak=0;S.goodConsec=0;
+    S.badStreak++;
+    if(S.streakActive){S.streakActive=false;bgSetTempo(1.0);}
+    // 3 bad in a row — 12.5% pulled off stage
+    if(S.badStreak>=3&&Math.random()<0.125){
+      S.acting=false;
+      setTimeout(function(){triggerSpecial('pulledoffstage');},600);
+      return;
+    }
+  }
+}
+
+// 100% bar check — called after applyDeltas
+function check100Trigger(){
+  if(S.laugh>=100||S.engage>=100){
+    var r=Math.random();
+    if(r<0.125){setTimeout(function(){triggerSpecial('legend');},800);}
+    else if(r<0.25){setTimeout(function(){triggerSpecial('paparazzi');},800);}
+  }
+}
+
+function triggerSpecial(type){
+  stopTmr();bgStop();
+  S.specialScreen=type;
+  if(type==='legend'||type==='paparazzi'||type==='tvdeal'){SFX.biglaugh();SFX.bigClap();}
+  else{SFX.gameover();}
+  render();
+}
+
+// Speed modifier based on how fast player acted during hot streak
+// Returns a multiplier for ld/ed deltas
+function streakSpeedMod(){
+  if(!S.streakActive)return 1.0;
+  var elapsed=(Date.now()-S.lastActTime)/1000; // seconds since timer started
+  // < 4s = fast = BONUS (1.5x)
+  // 4-6s = normal (1.0x)
+  // > 6s = slow = MELLOW (0.45x)
+  if(elapsed<4)return 1.5;
+  if(elapsed<=6)return 1.0;
+  return 0.45;
+}
+
+function applyDeltas(ld,ed){
+  var actualLaugh=Math.round(ld*engMult());
+  S.laugh=Math.min(100,Math.max(0,S.laugh+actualLaugh));
+  S.engage=Math.min(100,Math.max(0,S.engage+ed));
+  if(S.laugh>=100){
+    S.stars++;
+    S.score+=30+~~(S.engage/5);
+    S.laugh=65;
+    setTimeout(function(){SFX.biglaugh();SFX.bigClap();},200);
+  }
+  return{laugh:S.laugh,engage:S.engage};
+}
+
+function stopTmr(){if(_ti){clearInterval(_ti);_ti=null;}}
+function startTmr(){
+  stopTmr();S.timer=10;render();
+  _ti=setInterval(function(){
+    if(S.acting||S.heck)return;
+    SFX.tick(S.timer);
+    if(S.timer<=1){
+      applyDeltas(-8,-20);
+      S.react='booing';S.msg='"..."\n*crickets*';render();
+      if(S.engage<=0){stopTmr();setTimeout(endGame,1300);return;}
+      clearTimeout(S.mT);S.mT=setTimeout(function(){S.react='neutral';S.msg='';S.timer=10;render();},1600);
+    }else{S.timer--;render();}
+  },1000);
+}
+function rollEvent(){return Math.random()<(1/8)?SPECIALS[~~(Math.random()*SPECIALS.length)]:null;}
+
+// HINT SYSTEM — 1/4 chance each turn
+var HINT_TEXTS={
+  joke:["Try a classic joke — the crowd looks ready for it.","Go with a solid joke here. They're warm.","This feels like a joke moment. Trust it."],
+  crowd:["Work the crowd — they want interaction.","Ask them something. Crowd work will land well now.","They want to be part of the show. Work the room."],
+  oneliner:["Hit 'em with a quick one. Short and sharp.","A one-liner will kill right now.","Keep it tight. One-liner, no setup needed."],
+  edgy:["You can feel the room — they can handle something edgy.","They're ready for something risky. Go edgy.","Push the envelope. The energy's right for it."]
+};
+function rollHint(){
+  if(Math.random()>0.25)return null;
+  var actions=['joke','crowd','oneliner','edgy'];
+  var a=actions[~~(Math.random()*actions.length)];
+  var lines=HINT_TEXTS[a];
+  return{action:a,text:lines[~~(Math.random()*lines.length)]};
+}
+
+// WILD EVENTS — checked each turn
+function checkWildEvents(){
+  var r=Math.random();
+  // Kanye: 1/512
+  if(r<(1/512)){setTimeout(function(){triggerSpecial('kanye');},400);return true;}
+  // Naked dream: 1/128
+  if(r<(1/512+1/128)){setTimeout(function(){triggerSpecial('naked');},400);return true;}
+  // Next comedian chant: 1/128
+  if(r<(1/512+2/128)){setTimeout(function(){triggerSpecial('nextcomedian');},400);return true;}
+  // Dog runs loose: 1/128
+  if(r<(1/512+3/128)){setTimeout(function(){triggerSpecial('dog');},400);return true;}
+  return false;
+}
+
+// PEE MECHANIC — roll after every 4th turn
+function rollPee(){
+  if(S.needsPee)return; // already active
+  if(S.turnCount>0&&S.turnCount%4===0&&Math.random()<(1/32)){
+    S.needsPee=true;
+    S.peeCountdown=2+~~(Math.random()*2); // 2 or 3 moves
+    S.peeResult=Math.random()<0.5?'accident_boo':'accident_win';
+    S.penaltyMsg='🚽 NATURE IS CALLING LOUDLY';
+    clearTimeout(S.penaltyT);
+    S.penaltyT=setTimeout(function(){S.penaltyMsg='';render();},3000);
+    render();
+  }
+}
+function chkStreak(t){S.actionStreak.push(t);if(S.actionStreak.length>4)S.actionStreak.shift();if(S.actionStreak.length>=3){var l=S.actionStreak.slice(-3);if(l[0]===l[1]&&l[1]===l[2])return -10;}return 0;}
+
+// Early round modifier: rounds 1-2 jokes get a penalty
+function earlyPenalty(delta){
+  if(S.round<=2&&delta>0){
+    // good jokes in early rounds are less effective
+    delta=Math.max(1,Math.floor(delta*0.45));
+  }
+  return delta;
+}
+
+// ═══ WIDER JOKE DELTA RANGES ═══
+// Returns {laughDelta, engageDelta, react, dud}
+function jd(joke,isCustom){
+  if(!joke&&!isCustom)return{ld:0,ed:0,react:'neutral'};
+  if(isCustom){
+    if(Math.random()>.5)return{ld:35+~~(Math.random()*35),ed:10+~~(Math.random()*15),react:'laughing'};
+    return{ld:-30-~~(Math.random()*30),ed:-15-~~(Math.random()*15),react:'booing'};
+  }
+  if(joke.type==='dud'){return{ld:-(1+~~(Math.random()*4)),ed:-8,react:'neutral',dud:true};}
+  var r=Math.random();
+  if(joke.type==='flat'){return{ld:~~(Math.random()*8)-4,ed:~~(Math.random()*6)-3,react:r>.5?'clapping':'neutral'};}
+  if(joke.type==='political'){
+    if(r>.6)return{ld:12+~~(Math.random()*20),ed:5+~~(Math.random()*10),react:'laughing'};
+    if(r>.3)return{ld:2+~~(Math.random()*10),ed:2+~~(Math.random()*6),react:'clapping'};
+    return{ld:-10-~~(Math.random()*20),ed:-8-~~(Math.random()*12),react:'booing'};
+  }
+  // good — much wider range
+  if(r>.7)return{ld:18+~~(Math.random()*32),ed:8+~~(Math.random()*18),react:'laughing'};   // banger
+  if(r>.5)return{ld:8+~~(Math.random()*16),ed:4+~~(Math.random()*10),react:'laughing'};    // good
+  if(r>.35)return{ld:3+~~(Math.random()*10),ed:2+~~(Math.random()*6),react:'clapping'};   // decent
+  if(r>.2)return{ld:-4-~~(Math.random()*8),ed:-4-~~(Math.random()*6),react:'booing'};     // misfire
+  return{ld:-12-~~(Math.random()*24),ed:-10-~~(Math.random()*16),react:'booing'};          // bomb
+}
+
+function earlyDamp(ld){
+  if(S.round<2&&ld>0)return Math.max(1,Math.floor(ld*0.45));
+  return ld;
+}
+
+function doAct(action){
+  if(S.acting)return;
+  if(action==='edgy'&&S.eu)return;
+  if(action==='custom_joke'&&!S.customJoke)return;
+  clearTimeout(S.mT);
+  S.acting=true;stopTmr();S.sa=null;S.penaltyMsg='';
+  var ld=0,ed=0,msg='',react='neutral',pm='',lab=action;
+  // Record action time for streak speed calculation
+  var _actNow=Date.now();
+  // Check if player followed hint
+  var _hintBonus=(S.hint&&S.hint.action===action&&Math.random()<0.75)?1:0;
+  S.hint=null; // consume hint
+
+  if(action==='event'&&S.pendingEvent){
+    var ev=S.pendingEvent;
+    SFX.talk();setTimeout(function(){ev.sfx();},350);
+    msg=ev.lines[~~(Math.random()*ev.lines.length)];
+    var evRaw=ev.delta();
+    // Events have bigger engage swings than laugh swings
+    ld=evRaw;ed=evRaw>0?evRaw*0.8:evRaw*1.4;
+    react=ev.react(evRaw);S.sa=ev.id;
+    lab='★ '+ev.name;S.pendingEvent=null;S.jokes++;S.round++;
+    setTimeout(function(){if(evRaw>0)SFX.biglaugh();else SFX.bigBoo();},900);
+    chkStreak('event');
+  }
+  else if(action==='heckler'){
+    SFX.talk();
+    var ins=INSULTS[~~(Math.random()*INSULTS.length)];
+    // Kicking out heckler: huge engage boost, good laugh boost
+    ld=20+~~(Math.random()*18);ed=35+~~(Math.random()*20);
+    react='laughing';msg='"'+ins+'"';S.heck=false;
+    setTimeout(function(){SFX.win();setTimeout(function(){bgStart('jazz');},750);},850);
+    lab='INSULT';chkStreak('heckler');
+  }
+  else if(action==='edgy'){
+    SFX.talk();
+    var ed2=EDGY_L[~~(Math.random()*EDGY_L.length)],good=Math.random()>.5;
+    S.eu=true;S.jokes++;S.round++;
+    clearTimeout(S.fT);S.flash=good?'good':'bad';
+    S.fT=setTimeout(function(){S.flash=null;render();},2800);
+    if(good){
+      ld=30+~~(Math.random()*30);ed=15+~~(Math.random()*20);
+      react='laughing';setTimeout(function(){SFX.edgygood();},850);
+    }else{
+      // Bad edgy: laugh tanks AND engage tanks hard
+      ld=-28-~~(Math.random()*28);ed=-30-~~(Math.random()*20);
+      react='booing';setTimeout(function(){SFX.edgybad();},850);
+    }
+    msg='"'+ed2+'"';lab='EDGY';chkStreak('edgy');
+  }
+  else if(action==='custom_joke'){
+    SFX.talk();
+    // HOT STREAK + custom joke = 50% chance of instant win!
+    if(S.streakActive&&S.goodStreak>=3&&Math.random()<0.5){
+      S.msg='"'+S.customJoke+'"';S.react='laughing';render();
+      setTimeout(function(){SFX.biglaugh();SFX.bigClap();},500);
+      setTimeout(function(){SFX.win();},1200);
+      S.mT=setTimeout(function(){
+        // Instant win: max out score
+        S.laugh=100;S.engage=100;S.score+=120;S.stars+=3;
+        S.log.push({action:'YOUR JOKE (🔥 CROWD ERUPTS!)',ld:99,ed:40,laugh:100,engage:100});
+        S.msg='';S.react='neutral';S.acting=false;S.sa=null;
+        endGame();
+      },2800);
+      S.penaltyMsg='🎤 THE CROWD GOES ABSOLUTELY WILD!';
+      return;
+    }
+    var cr=jd(null,true);
+    ld=cr.ld;ed=cr.ed;react=cr.react;
+    var cu=S.usedJokes['custom']||0;
+    if(cu>0){var pen2=Math.round(-10*cu);ld+=pen2;ed+=Math.round(pen2*0.6);pm='REPEAT JOKE! '+pen2;SFX.penalty();}
+    S.usedJokes['custom']=(cu+1);
+    S.jokeLog.push({id:'custom',text:S.customJoke,ld:ld});
+    msg='"'+S.customJoke+'"';S.jokes++;S.round++;
+    if(ld>0){setTimeout(function(){SFX.biglaugh();},880);}
+    else{setTimeout(function(){SFX.bigBoo();},880);}
+    lab='YOUR JOKE';
+    var sp0=chkStreak('joke');if(sp0<0){ld+=sp0;ed+=Math.round(sp0*0.5);pm=(pm?pm+' ':'')+'STREAK -10';}
+  }
+  else if(action==='joke'){
+    SFX.talk();
+    var pool=JOKES.slice();
+    pool.sort(function(){return Math.random()-.5;});
+    var chosen=pool[0];
+    var pu=S.usedJokes[chosen.id]||0;
+    var res3=jd(chosen,false);
+    ld=earlyDamp(res3.ld);ed=earlyDamp(res3.ed);react=res3.react;
+    var isDud=res3.dud;
+    if(isDud){
+      setTimeout(function(){SFX.crickets();},700);
+      setTimeout(function(){SFX.groan();},1400);
+      react='booing';
+    }else{
+      if(react==='laughing')setTimeout(function(){SFX.laugh();},880);
+      else if(react==='clapping')setTimeout(function(){SFX.clap();},880);
+      else if(react==='booing')setTimeout(function(){SFX.boo();},880);
+    }
+    if(pu>0&&!isDud){var pen=Math.round(-10*pu);ld+=pen;ed+=Math.round(pen*0.6);pm='REPEAT JOKE! '+pen;SFX.penalty();}
+    S.usedJokes[chosen.id]=(pu+1);
+    if(!isDud)S.jokeLog.push({id:chosen.id,text:chosen.text,ld:ld});
+    msg='"'+chosen.text+'"';S.jokes++;S.round++;
+    lab=isDud?'DUD JOKE':'JOKE';
+    var sp=chkStreak('joke');if(sp<0&&!isDud){ld+=sp;ed+=Math.round(sp*0.5);pm=(pm?pm+' ':'')+'STREAK -10';}
+    if(S.round<2&&ld>0)pm=(pm?pm+' ':'')+'❄ COLD CROWD';
+  }
+  else if(action==='crowd'){
+    SFX.talk();
+    var cw=CROWD[~~(Math.random()*CROWD.length)];
+    ld=earlyDamp(8+~~(Math.random()*16));ed=4+~~(Math.random()*10);
+    react='clapping';msg='"'+cw+'"';
+    setTimeout(function(){SFX.clap();},880);
+    S.jokes++;S.round++;
+    var sp2=chkStreak('crowd');if(sp2<0){ld+=sp2;ed+=Math.round(sp2*0.5);pm='STREAK PENALTY -10';}
+    lab='CROWD WORK';
+  }
+  else if(action==='oneliner'){
+    SFX.talk();
+    var ol=OL[~~(Math.random()*OL.length)],r2=Math.random();
+    if(r2>.55){ld=10+~~(Math.random()*22);ed=5+~~(Math.random()*12);react='laughing';setTimeout(function(){SFX.laugh();},880);}
+    else if(r2>.3){ld=3+~~(Math.random()*12);ed=2+~~(Math.random()*8);react='clapping';setTimeout(function(){SFX.clap();},880);}
+    else{ld=-8-~~(Math.random()*18);ed=-6-~~(Math.random()*12);react='booing';setTimeout(function(){SFX.boo();},880);}
+    ld=earlyDamp(ld);
+    msg='"'+ol+'"';S.jokes++;S.round++;
+    var sp3=chkStreak('oneliner');if(sp3<0){ld+=sp3;ed+=Math.round(sp3*0.5);pm='STREAK PENALTY -10';}
+    lab='ONE-LINER';
+  }
+  else if(action==='callback'){
+    SFX.talk();
+    var cb=CALLBACKS[~~(Math.random()*CALLBACKS.length)];
+    var pg=S.jokeLog.filter(function(j){return j.ld>0;}).length;
+    ld=pg>0?12+~~(Math.random()*18):2+~~(Math.random()*8);
+    ed=pg>0?6+~~(Math.random()*10):1+~~(Math.random()*5);
+    react=ld>10?'laughing':'clapping';msg=cb;
+    setTimeout(function(){if(ld>10)SFX.laugh();else SFX.clap();},900);
+    lab='CALLBACK';chkStreak('callback');
+  }
+  else if(action==='stall'){
+    SFX.talk();
+    var st=STALLS[~~(Math.random()*STALLS.length)];
+    // Stall: small laugh loss, bigger engage loss
+    ld=-4;ed=-14;
+    msg=st;react='neutral';
+    SFX.gestureMic();
+    lab='STALL';chkStreak('stall');
+  }
+  else if(action==='improv'){
+    SFX.talk();
+    var good=Math.random()>.5;
+    if(good){
+      ld=30+~~(Math.random()*50);ed=15+~~(Math.random()*25);react='laughing';
+      setTimeout(function(){SFX.biglaugh();},800);
+      msg='*launches into improvised bit*\n...somehow it lands perfectly.';
+    }else{
+      ld=-28-~~(Math.random()*42);ed=-20-~~(Math.random()*25);react='booing';
+      setTimeout(function(){SFX.bigBoo();},800);
+      msg='*launches into improvised bit*\n...it goes spectacularly wrong.';
+    }
+    clearTimeout(S.fT);S.flash=good?'good':'bad';
+    S.fT=setTimeout(function(){S.flash=null;render();},2600);
+    lab='IMPROV';chkStreak('improv');
+  }
+  else if(action==='pee_leave'){
+    // Comedian dashes off stage
+    S.needsPee=false;S.acting=false;
+    // Leaving the stage drops engagement but saves from accident
+    applyDeltas(-10,-25);
+    S.log.push({action:'LEFT STAGE (🚽)',ld:-10,ed:-25,laugh:S.laugh,engage:S.engage});
+    if(S.engage<=0){endGame();return;}
+    render();startTmr();return;
+  }
+  else if(action==='end'){S.acting=false;endGame();return;}
+
+  // Apply hint bonus — small positive boost added to deltas
+  if(_hintBonus&&action!=='stall'&&action!=='pee_leave'){
+    ld=ld+~~(4+Math.random()*8);
+    ed=ed+~~(2+Math.random()*5);
+    pm=(pm?pm+' ':'')+'💡 HINT FOLLOWED!';
+  }
+  if(pm){S.penaltyMsg=pm;clearTimeout(S.penaltyT);S.penaltyT=setTimeout(function(){S.penaltyMsg='';render();},2400);}
+  S.msg=msg;S.react=react;render();
+
+  S.lastActTime=_actNow; // store for speed calc
+  S.mT=setTimeout(function(){
+    // Apply streak speed multiplier to deltas
+    var spd=streakSpeedMod();
+    var finalLd=Math.round(ld*spd);
+    var finalEd=Math.round(ed*spd);
+    applyDeltas(finalLd,finalEd);
+    updateStreak(finalLd);
+    var speedTag=spd>1.2?' ⚡FAST':spd<0.5?' 💤SLOW':'';
+    S.log.push({action:lab+speedTag,ld:finalLd,ed:finalEd,laugh:S.laugh,engage:S.engage});
+    // Reset lastActTime for next action
+    S.lastActTime=Date.now();
+    S.msg='';S.react='neutral';S.acting=false;S.sa=null;
+    // Pee countdown
+    if(S.needsPee&&action!=='pee_leave'){
+      S.peeCountdown--;
+      if(S.peeCountdown<=0){
+        S.needsPee=false;
+        if(S.peeResult==='accident_win'){
+          // Somehow the crowd loves it
+          S.laugh=Math.min(100,S.laugh+40);S.engage=Math.min(100,S.engage+30);
+          triggerSpecial('pee_win');return;
+        }else{
+          S.engage=0;triggerSpecial('pee_boo');return;
+        }
+      }
+    }
+    S.turnCount++;
+    render();
+    if(S.engage<=0){endGame();return;}
+    if(S.heckPending&&!S.heck){S.heckPending=false;S.heck=true;bgStart('boss');render();return;}
+    // Check wild events
+    if(checkWildEvents())return;
+    // Pee roll
+    rollPee();
+    S.pendingEvent=rollEvent();
+    S.hint=rollHint();
+    startTmr();
+  },2700);
+}
+
+function endGame(){
+  stopTmr();bgStop();
+  // Final score = accumulated score + current laugh level
+  var total=S.score+S.laugh;
+  var g=total>=200?'S':total>=140?'A':total>=90?'B':total>=55?'C':total>=30?'D':'F';
+  S.grade=g;S.review=REVIEWS[g][0];S.screen='review';SFX.gameover();render();
+}
+
+function startGame(){
+  stopTmr();bgStop();clearTimeout(S.mT);clearTimeout(S.fT);
+  var heck=Math.random()<(1/64);
+  Object.assign(S,{screen:'game',laugh:40,engage:60,score:0,stars:0,jokes:0,eu:false,timer:10,acting:false,msg:'',react:'neutral',heck:heck,log:[],grade:'',flash:null,pressed:null,sa:null,usedJokes:{},actionStreak:[],penaltyMsg:'',jokeLog:[],pendingEvent:null,heckPending:false,showCustomInput:false,round:0,goodStreak:0,streakActive:false,lastActTime:Date.now(),badStreak:0,goodConsec:0,specialScreen:null,hint:null,turnCount:0,needsPee:false,peeCountdown:0,peeResult:null});
+  bgSetTempo(1.0);
+  render();
+  setTimeout(function(){bgStart(heck?'boss':'jazz');if(!heck)startTmr();},200);
+}
+
+// ════════════ PIXEL ART ════════════
+function comedianBack(sa){
+  var ba=sa==='dance'?'animation:dance .5s infinite;':sa==='fall'?'animation:fall .6s forwards;':sa==='spin'?'animation:spin 1.2s infinite;':'';
+  return '<div style="'+ba+'position:relative;display:inline-block;width:120px;">'
+  +'<div style="position:relative;width:100px;height:56px;margin:0 auto;">'
+  +'<div style="position:absolute;top:0;left:0;right:0;height:52px;background:#3a1a06;border-radius:50px 50px 0 0;border:4px solid #1a0800;border-bottom:none;overflow:hidden;">'
+  +'<div style="position:absolute;top:5px;left:5px;right:5px;height:40px;background:#4a2410;border-radius:40px 40px 0 0;"></div>'
+  +'<div style="position:absolute;top:7px;left:28px;width:44px;height:13px;background:#c8a020;border-radius:22px;opacity:.75;"></div>'
+  +'<div style="position:absolute;top:5px;left:36px;width:28px;height:8px;background:#e8c840;border-radius:14px;opacity:.5;"></div></div>'
+  +'<div style="position:absolute;bottom:0;left:0;width:10px;height:16px;background:#d08850;border:3px solid #a06030;border-radius:4px 0 0 4px;"></div>'
+  +'<div style="position:absolute;bottom:0;right:0;width:10px;height:16px;background:#d08850;border:3px solid #a06030;border-radius:0 4px 4px 0;"></div>'
+  +'</div>'
+  +'<div style="position:relative;width:92px;height:28px;margin:0 auto;">'
+  +'<div style="position:absolute;inset:0;background:#3a1a06;border-left:4px solid #1a0800;border-right:4px solid #1a0800;"></div>'
+  +'<div style="position:absolute;bottom:0;left:8px;right:8px;height:8px;background:#d08850;"></div></div>'
+  +'<div style="width:28px;height:18px;margin:0 auto;background:#d08850;border-left:4px solid #a06030;border-right:4px solid #a06030;"></div>'
+  +'<div style="position:relative;width:120px;height:68px;">'
+  +'<div style="position:absolute;top:0;left:0;width:52px;height:68px;background:#1e44aa;border:4px solid #0c2260;border-right:none;border-bottom:none;"></div>'
+  +'<div style="position:absolute;top:0;left:2px;width:14px;height:68px;background:#162e7a;"></div>'
+  +'<div style="position:absolute;top:0;right:0;width:44px;height:68px;background:#182e88;border:4px solid #0c2260;border-left:none;border-bottom:none;"></div>'
+  +'<div style="position:absolute;top:0;left:52px;width:24px;height:68px;background:#060e28;"></div>'
+  +'<div style="position:absolute;top:0;left:44px;width:14px;height:12px;background:#cc3010;border:2px solid #881000;"></div></div>'
+  +'<div style="position:absolute;top:180px;left:-4px;width:22px;height:52px;background:#1e44aa;border:4px solid #0c2260;transform:rotate(-6deg);transform-origin:top center;"></div>'
+  +'<div style="position:absolute;top:176px;right:-4px;width:20px;height:52px;background:#182e88;border:4px solid #0c2260;transform:rotate(10deg);transform-origin:top center;"></div>'
+  +'<div style="position:absolute;top:222px;right:-8px;width:18px;height:14px;background:#d08850;border:3px solid #a06030;border-radius:3px;transform:rotate(10deg);"></div>'
+  +'<div style="position:absolute;top:202px;right:-20px;width:20px;height:20px;background:radial-gradient(circle at 35% 35%,#eee,#aaa 50%,#777);border:3px solid #555;border-radius:50%;transform:rotate(30deg);"></div>'
+  +'<div style="position:absolute;top:220px;right:-15px;width:10px;height:28px;background:linear-gradient(90deg,#ccc,#999,#ccc);border:2px solid #777;transform:rotate(30deg);border-radius:2px;"></div>'
+  +'</div>';
+}
+
+var SK=['#f5c5a0','#e8a878','#d4956a','#c68642','#f0b090'];
+var HR=['#3a1a00','#6B2D0A','#2c1810','#4a2010','#1a1a1a','#5a3010'];
+var SH=['#1a3a8a','#8a2010','#1a6a3a','#2244aa','#992210','#3355bb','#aa3322','#2255cc'];
+function pf(seed,react,isH,w){
+  w=w||26;
+  var sk=SK[seed%SK.length],hr=HR[(seed*7)%HR.length],sh=SH[(seed*13)%SH.length];
+  var hw=~~(w*.9),hh=~~(w*.88),lh=~~(w*.5),bh=~~(w*.58);
+  var an=isH?'animation:wobble .5s infinite;':react==='laughing'?'animation:bob .4s infinite;animation-delay:'+(seed*.05)+'s;':'';
+  var mouth='';
+  if(isH)mouth='<div style="position:absolute;bottom:'+~~(hh*.17)+'px;left:50%;transform:translateX(-50%);width:'+~~(hw*.4)+'px;height:'+~~(hw*.1)+'px;background:#cc4400;border-radius:2px;"></div>';
+  else if(react==='laughing'||react==='clapping')mouth='<div style="position:absolute;bottom:'+~~(hh*.14)+'px;left:50%;transform:translateX(-50%);width:'+~~(hw*.46)+'px;height:'+~~(hw*.24)+'px;background:#cc2200;border-radius:0 0 '+~~(hw*.24)+'px '+~~(hw*.24)+'px;overflow:hidden;"><div style="position:absolute;top:0;left:0;right:0;height:'+~~(hw*.08)+'px;background:#fff;"></div></div>';
+  else if(react==='booing')mouth='<div style="position:absolute;bottom:'+~~(hh*.16)+'px;left:50%;transform:translateX(-50%);width:'+~~(hw*.36)+'px;height:'+~~(hw*.18)+'px;background:#660000;border-radius:'+~~(hw*.18)+'px '+~~(hw*.18)+'px 0 0;"></div>';
+  else mouth='<div style="position:absolute;bottom:'+~~(hh*.17)+'px;left:50%;transform:translateX(-50%);width:'+~~(hw*.3)+'px;height:'+~~(hw*.1)+'px;background:#cc6644;border-radius:0 0 '+~~(hw*.15)+'px '+~~(hw*.15)+'px;"></div>';
+  var ck='<div style="position:absolute;bottom:'+~~(hh*.23)+'px;left:'+~~(hw*.06)+'px;width:'+~~(hw*.18)+'px;height:'+~~(hw*.12)+'px;background:rgba(220,100,80,.35);border-radius:50%;"></div><div style="position:absolute;bottom:'+~~(hh*.23)+'px;right:'+~~(hw*.06)+'px;width:'+~~(hw*.18)+'px;height:'+~~(hw*.12)+'px;background:rgba(220,100,80,.35);border-radius:50%;"></div>';
+  var eyY=~~(hh*.42);
+  var ey='<div style="position:absolute;bottom:'+eyY+'px;left:'+~~(hw*.22)+'px;width:'+~~(hw*.12)+'px;height:'+~~(hw*.1)+'px;background:#1a1010;border-radius:1px;"></div><div style="position:absolute;bottom:'+eyY+'px;right:'+~~(hw*.22)+'px;width:'+~~(hw*.12)+'px;height:'+~~(hw*.1)+'px;background:#1a1010;border-radius:1px;"></div>';
+  return '<div style="'+an+'display:inline-block;width:'+w+'px;flex-shrink:0;position:relative;">'
+  +'<div style="width:'+hw+'px;height:'+lh+'px;background:'+(isH?'#cc5500':hr)+';border-radius:50% 50% 0 0;margin:0 auto;border:2px solid rgba(0,0,0,.4);"></div>'
+  +'<div style="width:'+hw+'px;height:'+hh+'px;background:'+(isH?'#ffaa44':sk)+';margin:0 auto;border:2px solid rgba(0,0,0,.35);position:relative;">'+ey+ck+mouth+(isH?'<div style="position:absolute;top:-13px;right:-13px;font-size:12px;">🍺</div>':'')+'</div>'
+  +'<div style="width:'+w+'px;height:'+bh+'px;background:'+(isH?'#882200':sh)+';margin:0 auto;border:2px solid rgba(0,0,0,.35);border-top:none;"></div>'
+  +'</div>';
+}
+
+function stg(react,heck,sa,msg,flash,streakActive,streak){
+  streakActive=streakActive||false;streak=streak||0;
+  var lc=heck?30:200,sbg=heck?'#110000':'#000008';
+  var r1='<div style="position:absolute;top:4px;left:12%;right:4%;display:flex;align-items:flex-end;justify-content:space-around;gap:1px;z-index:3;">';
+  for(var i=0;i<8;i++)r1+='<div style="flex:1;display:flex;justify-content:center;">'+pf(i,react,false,18)+'</div>';r1+='</div>';
+  var r2='<div style="position:absolute;top:24px;left:10%;right:2%;display:flex;align-items:flex-end;justify-content:space-around;gap:1px;z-index:4;">';
+  for(var i=0;i<7;i++)r2+='<div style="flex:1;display:flex;justify-content:center;">'+pf(i+8,react,heck&&i===3,24)+'</div>';r2+='</div>';
+  var r3='<div style="position:absolute;top:54px;left:8%;right:0;display:flex;align-items:flex-end;justify-content:space-around;gap:2px;z-index:5;">';
+  for(var i=0;i<6;i++)r3+='<div style="flex:1;display:flex;justify-content:center;">'+pf(i+15,react,false,28)+'</div>';r3+='</div>';
+  var lc2='<div style="position:absolute;bottom:28%;left:0;width:18%;display:flex;flex-direction:column;align-items:flex-end;justify-content:flex-end;gap:2px;z-index:6;padding-bottom:4px;">'+pf(21,react,false,24)+pf(22,react,false,28)+pf(23,react,heck,26)+'</div>';
+  var rc2='<div style="position:absolute;bottom:28%;right:1%;width:17%;display:flex;flex-direction:column;align-items:flex-start;justify-content:flex-end;gap:2px;z-index:6;padding-bottom:4px;">'+pf(24,react,false,24)+pf(25,react,false,28)+pf(26,react,false,26)+'</div>';
+  return '<div style="width:100%;height:100%;position:relative;background:'+sbg+';overflow:hidden;">'
+  +'<div style="position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,.07) 3px,rgba(0,0,0,.07) 4px);pointer-events:none;z-index:98;"></div>'
+  +'<div style="position:absolute;top:0;left:0;right:0;height:8px;background:#0a0a0a;z-index:12;"></div>'
+  +'<div style="position:absolute;left:0;top:0;width:8%;height:100%;z-index:10;background:linear-gradient(90deg,#800000,#6a0000,#500000);">'
+  +'<div style="position:absolute;top:0;left:20%;width:15%;height:100%;background:rgba(0,0,0,.28);"></div>'
+  +'<div style="position:absolute;top:0;left:60%;width:10%;height:100%;background:rgba(0,0,0,.18);"></div></div>'
+  +[{l:'20%'},{l:'38%'},{l:'57%'},{l:'76%'}].map(function(lt){return '<div style="position:absolute;top:8px;left:'+lt.l+';width:34px;height:13px;background:#222;border:2px solid #333;z-index:13;"></div><div style="position:absolute;top:21px;left:calc('+lt.l+' + 1px);width:30px;height:7px;background:#ffff99;box-shadow:0 2px 28px 12px rgba(255,255,'+lc+',.27);z-index:12;"></div>';}).join('')
+  +'<div style="position:absolute;top:8px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:300px solid transparent;border-right:300px solid transparent;border-top:120vh solid rgba(255,255,160,.036);z-index:2;pointer-events:none;"></div>'
+  +r1+r2+r3+lc2+rc2
+  +'<div style="position:absolute;bottom:0;left:0;right:0;height:28%;background:linear-gradient(180deg,#c07828,#a06018,#844808);border-top:3px solid #d09040;z-index:7;">'
+  +'<div style="position:absolute;top:10px;left:0;right:0;height:1px;background:rgba(0,0,0,.18);"></div>'
+  +'<div style="position:absolute;top:24px;left:0;right:0;height:1px;background:rgba(0,0,0,.14);"></div>'
+  +'<div style="position:absolute;top:0;left:28%;width:44%;height:100%;background:radial-gradient(ellipse at 50% 0%,rgba(255,220,120,.12),transparent 70%);"></div></div>'
+  +'<div style="position:absolute;bottom:28%;left:50%;transform:translateX(-50%);z-index:8;">'+comedianBack(sa)+'</div>'
+  +(msg?'<div style="position:absolute;bottom:56%;left:50%;transform:translateX(-50%);background:#fff;border:3px solid #000;padding:9px 14px;max-width:72%;z-index:22;text-align:center;box-shadow:4px 4px 0 #000;animation:slideup .13s ease;">'
+  +'<div style="position:absolute;bottom:-13px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:10px solid transparent;border-right:10px solid transparent;border-top:13px solid #000;"></div>'
+  +'<div style="position:absolute;bottom:-8px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;border-top:9px solid #fff;"></div>'
+  +'<span style="font-family:\'Press Start 2P\',monospace;font-size:7px;color:#000;white-space:pre-line;line-height:2.1;">'+msg+'</span></div>':'')
+  +(heck?'<div style="position:absolute;top:28px;left:50%;transform:translateX(-50%);color:#ff2020;font-family:\'Press Start 2P\',monospace;font-size:8px;z-index:22;background:rgba(0,0,0,.92);padding:6px 14px;border:2px solid #ff2020;white-space:nowrap;animation:redglow 1s infinite;">⚠  DRUNK HECKLER  ⚠</div>':'')
+  +(flash?'<div style="position:absolute;inset:0;z-index:30;pointer-events:none;animation:'+(flash==='good'?'flashg':'flashr')+' .38s infinite;"></div>':'')
+  +(streakActive?'<div style="position:absolute;inset:0;z-index:29;pointer-events:none;border:4px solid #ff8800;box-shadow:inset 0 0 30px rgba(255,120,0,.18),0 0 20px rgba(255,100,0,.3);"></div>':'')
+  +(streakActive?'<div style="position:absolute;top:8px;right:10px;font-family:\'Press Start 2P\',monospace;color:#ff9900;font-size:7px;z-index:25;background:rgba(0,0,0,.7);padding:4px 8px;border:2px solid #ff8800;animation:pop .5s infinite;">🔥x'+streak+'</div>':'')
+  +'</div>';
+}
+
+// ════════════ D-PAD BUTTON ════════════
+function dpBtn(dir,emoji,l1,l2,sub,dis,sp,ce){
+  var pos={up:'top:0;left:50%;transform:translateX(-50%);',down:'bottom:0;left:50%;transform:translateX(-50%);',left:'top:50%;left:0;transform:translateY(-50%);',right:'top:50%;right:0;transform:translateY(-50%);'}[dir];
+  var bg,brd,tc,ac2,sc;
+  if(sp){bg='#3a1000';brd='#ff6200';tc='#ffaa55';ac2='#ff8833';sc='#ff5500';}
+  else if(ce){bg='#1a1200';brd='#ffcc00';tc='#ffee66';ac2='#ffcc00';sc='#ddaa00';}
+  else{bg='#0c0c20';brd='#3344aa';tc='#aabbdd';ac2='#6677cc';sc='#445588';}
+  var arrs={up:'▲',down:'▼',left:'◀',right:'▶'};
+  var glow=sp?'box-shadow:inset 0 0 20px rgba(255,80,0,.25),0 0 18px rgba(255,80,0,.4);':ce?'box-shadow:inset 0 0 18px rgba(255,200,0,.2),0 0 18px rgba(255,200,0,.32);':'';
+  var isP=S.pressed===dir;
+  var tb=(['up','down'].indexOf(dir)>=0)?'translateX(-50%)':'translateY(-50%)';
+  var ps=isP?'filter:brightness(1.7);transform:'+tb+' scale(.9);':'';
+  return '<div id="dp_'+dir+'" style="position:absolute;'+pos+'width:128px;height:118px;background:'+bg+';border:4px solid '+brd+';border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;'+glow+ps+(dis?'opacity:.22;cursor:default;':'cursor:pointer;')+(sp?'animation:pop .9s infinite;':'')+'">'
+  +'<div style="font-size:24px;line-height:1;">'+emoji+'</div>'
+  +'<div style="font-family:\'Press Start 2P\',monospace;font-size:12px;color:'+ac2+';line-height:1;">'+arrs[dir]+'</div>'
+  +'<div style="font-family:\'Press Start 2P\',monospace;font-size:9.5px;color:'+tc+';text-align:center;line-height:1.5;white-space:nowrap;">'+l1+'</div>'
+  +(l2?'<div style="font-family:\'Press Start 2P\',monospace;font-size:9.5px;color:'+tc+';text-align:center;line-height:1.5;white-space:nowrap;">'+l2+'</div>':'')
+  +(sub?'<div style="font-family:\'Press Start 2P\',monospace;font-size:5px;color:'+sc+';text-align:center;line-height:1.4;margin-top:1px;">'+sub+'</div>':'')
+  +'</div>';
+}
+
+// ════════════ SCREENS ════════════
+function render(){
+  var html;
+  if(S.screen==='start')html=sStart();
+  else if(S.screen==='game'){
+    if(S.specialScreen)html=sSpecial(S.specialScreen);
+    else html=sGame();
+  }
+  else html=sReview();
+  document.getElementById('G').innerHTML=html;
+  bind();
+}
+
+function sSpecial(type){
+  var lines={
+    legend:{
+      emoji:'🎤',
+      title:'A LEGEND APPEARS!',
+      sub:'Comedy royalty walks out...',
+      color:'#ffcc00',
+      body:"*the crowd goes absolutely berserk*\n\nA comedy legend strolls onto the stage,\nshakes your hand, and says:\n\n\"Kid... I haven't seen anything like that\nin thirty years. You've GOT it.\"",
+      btn:'HOLY %#@& · CONTINUE',
+      btnColor:'#cc0000',
+      action:'continue'
+    },
+    paparazzi:{
+      emoji:'📸',
+      title:'PAPARAZZI ALERT!',
+      sub:'Cameras flooding the stage...',
+      color:'#88ddff',
+      body:"*flashbulbs explode from every corner*\n\nA wall of photographers crashes the venue,\nall aimed at YOU.\n\nTomorrow's headlines are going to be\nVERY interesting.",
+      btn:'SMILE FOR THE CAMERAS',
+      btnColor:'#0044aa',
+      action:'continue'
+    },
+    tvdeal:{
+      emoji:'📺',
+      title:'CABLE TV SPECIAL!',
+      sub:'Your agent is on the phone...',
+      color:'#44ff88',
+      body:"*phone rings mid-standing ovation*\n\nYour agent screams:\n\"They want to offer you a CABLE TV SPECIAL.\nTen. Million. Dollars.\"\n\nThe crowd hasn't stopped cheering.\nYou just won stand-up.",
+      btn:'SIGN THE CONTRACT 💰 $10,000,000',
+      btnColor:'#118800',
+      action:'win'
+    },
+    pulledoffstage:{
+      emoji:'🚨',title:'PULLED OFF STAGE',sub:'The club owner steps in...',color:'#ff4444',
+      body:"*the club owner appears from the wings*\n\n\"I'm going to stop you right there.\nI am SO sorry to this audience.\nWe'll give everyone a full refund.\"\n\n*a single tumbleweed rolls across the stage*",
+      btn:'WALK OF SHAME · EXIT',btnColor:'#660000',action:'lose'
+    },
+    kanye:{
+      emoji:'🎤',title:'KANYE INTERRUPTS!',sub:'An uninvited guest...',color:'#c8a000',
+      body:"*a figure rushes from backstage, grabs your mic*\n\n\"Yo, I'm gonna let you finish but—\nI am the greatest comedian of all time.\nOF ALL TIME.\"\n\n*security rushes in*\n*the crowd is losing their minds*",
+      btn:'LET HIM COOK · CONTINUE',btnColor:'#664400',action:'continue'
+    },
+    naked:{
+      emoji:'😱',title:'NO CLOTHES!',sub:'A nightmare scenario...',color:'#ff88aa',
+      body:"*you look down*\n\n...you have no clothes on.\nThe crowd stares.\nYou stare back.\n\n*everything goes white*\n\n...you wake up.\nYou are fully clothed.\nYou are in your bed.\nYou are extremely late for the show.",
+      btn:'JUST A DREAM · CONTINUE',btnColor:'#881144',action:'continue'
+    },
+    nextcomedian:{
+      emoji:'📢',title:'CHANT BEGINS!',sub:'From the back of the room...',color:'#ff6644',
+      body:"*someone in the back starts it*\n\nNEXT! NEXT! NEXT!\n\n*it spreads*\n\nNEXT! NEXT! NEXT!\n\n*the whole room*\n\nNEXT! NEXT! NEXT!\n\n...you're not done yet.",
+      btn:'I AM NOT DONE YET',btnColor:'#882200',action:'continue'
+    },
+    dog:{
+      emoji:'🐕',title:'DOG LOOSE!',sub:'A golden retriever has entered the building...',color:'#ddaa44',
+      body:"*a large, extremely happy dog bolts through\nthe audience at full speed*\n\nIt drinks from glass #1.\nGlass #2. Glass #3.\n\nSomebody's beer is gone.\nSomebody else's beer is gone.\n\n*the dog sits and looks at you*\n*the crowd cheers louder than your best joke*",
+      btn:'GOOD BOY · CONTINUE',btnColor:'#664400',action:'continue'
+    },
+    pee_win:{
+      emoji:'💦',title:'AN ACCIDENT OCCURS',sub:'This... somehow works?',color:'#88ddff',
+      body:"*it happens*\n\nThe front row gasps.\nThen someone laughs.\nThen EVERYONE laughs.\n\nThis is the funniest thing\nthat has ever happened\nin this venue.\n\nYou have accidentally won.",
+      btn:'TAKE THE BOW',btnColor:'#006688',action:'continue'
+    },
+    pee_boo:{
+      emoji:'💦',title:'AN ACCIDENT OCCURS',sub:'The unthinkable...',color:'#ff4444',
+      body:"*it happens*\n\nThe front row gasps.\nThen someone boos.\nThen everyone boos.\n\nThe club owner cuts the lights.\nYou walk off in the dark.\n\nThis will not be on the highlight reel.",
+      btn:'EXIT QUIETLY',btnColor:'#660000',action:'lose'
+    }
+  };
+  var d=lines[type]||lines.legend;
+  return '<div style="width:100%;height:100vh;background:#000;display:flex;align-items:center;justify-content:center;padding:14px;overflow:hidden;">'
+  +'<div style="position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,.1) 3px,rgba(0,0,0,.1) 4px);pointer-events:none;"></div>'
+  +'<div style="position:relative;max-width:360px;width:100%;background:#06000b;border:4px solid '+d.color+';padding:20px;text-align:center;box-shadow:0 0 60px '+d.color+'55,inset 0 0 30px rgba(0,0,0,.5);">'
+  +'<div style="font-size:52px;margin-bottom:10px;">'+d.emoji+'</div>'
+  +'<div style="font-family:\'Press Start 2P\',monospace;color:'+d.color+';font-size:10px;margin-bottom:6px;line-height:1.6;">'+d.title+'</div>'
+  +'<div style="font-family:\'Press Start 2P\',monospace;color:#666;font-size:6px;margin-bottom:14px;">'+d.sub+'</div>'
+  +'<div style="height:2px;background:linear-gradient(90deg,transparent,'+d.color+',transparent);margin-bottom:14px;"></div>'
+  +'<div style="font-family:\'Press Start 2P\',monospace;color:#ddd;font-size:6.5px;line-height:2.2;white-space:pre-line;text-align:left;background:#0a0a14;border:2px solid #1a1a2a;padding:12px;margin-bottom:16px;">'+d.body+'</div>'
+  +'<button id="btnSpecial" data-action="'+d.action+'" style="width:100%;background:'+d.btnColor+';color:#fff;font-family:\'Press Start 2P\',monospace;border:3px solid '+d.color+';padding:14px 8px;font-size:8px;cursor:pointer;box-shadow:4px 4px 0 rgba(0,0,0,.6),0 0 16px '+d.color+'44;">'+d.btn+'</button>'
+  +'</div></div>';
+}
+
+function sStart(){
+  if(S.showCustomInput){
+    return '<div style="width:100%;height:100vh;background:#000;display:flex;align-items:center;justify-content:center;">'
+    +'<div style="max-width:340px;width:100%;background:#06000b;border:4px solid #ffcc00;padding:24px;text-align:center;box-shadow:0 0 50px #aa5500;">'
+    +'<div style="font-family:\'Press Start 2P\',monospace;color:#ffcc00;font-size:8px;margin-bottom:14px;">WRITE YOUR JOKE</div>'
+    +'<div style="font-family:\'Press Start 2P\',monospace;color:#888;font-size:5.5px;margin-bottom:12px;line-height:2.2;">UP TO 40 CHARACTERS<br>BIG SWING — WIN OR LOSE BIG!</div>'
+    +'<input id="jokeInput" maxlength="40" value="'+(S.customJoke||'')+'" style="width:100%;background:#0a0a1a;color:#fff;font-family:\'Press Start 2P\',monospace;font-size:8px;border:3px solid #3344aa;padding:10px;margin-bottom:5px;outline:none;" placeholder="type your joke..." />'
+    +'<div id="jcc" style="font-family:\'Press Start 2P\',monospace;color:#444;font-size:5px;text-align:right;margin-bottom:14px;">'+(S.customJoke?S.customJoke.length:0)+' / 40</div>'
+    +'<div style="display:flex;gap:8px;">'
+    +'<button id="btnSave" style="flex:1;background:#1a4a1a;color:#44ff88;font-family:\'Press Start 2P\',monospace;border:3px solid #44ff88;padding:10px;font-size:7px;cursor:pointer;">✓ SAVE</button>'
+    +'<button id="btnCancel" style="flex:1;background:#1a0000;color:#ff4444;font-family:\'Press Start 2P\',monospace;border:3px solid #ff4444;padding:10px;font-size:7px;cursor:pointer;">✗ CANCEL</button>'
+    +'</div></div></div>';
+  }
+  var hc=!!S.customJoke;
+  return '<div style="width:100%;height:100vh;background:#000;display:flex;align-items:center;justify-content:center;position:relative;padding:10px;">'
+  +'<div style="position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,.1) 3px,rgba(0,0,0,.1) 4px);pointer-events:none;z-index:1;"></div>'
+  +'<div style="position:relative;z-index:2;max-width:320px;width:100%;background:#06000b;border:4px solid #ffcc00;padding:15px 14px;text-align:center;box-shadow:0 0 60px #aa5500,inset 0 0 30px rgba(255,180,0,.04);">'
+  +'<div style="position:absolute;top:6px;left:8px;color:#ffcc00;font-size:11px;">★</div><div style="position:absolute;top:6px;right:8px;color:#ffcc00;font-size:11px;">★</div>'
+  +'<div style="position:absolute;bottom:6px;left:8px;color:#ffcc00;font-size:11px;">★</div><div style="position:absolute;bottom:6px;right:8px;color:#ffcc00;font-size:11px;">★</div>'
+  +'<div style="font-family:\'Press Start 2P\',monospace;color:#ffcc00;font-size:5.5px;letter-spacing:3px;margin-bottom:5px;">THE LAST LAUGH CLUB</div>'
+  +'<div style="height:2px;background:linear-gradient(90deg,transparent,#ffcc00,transparent);margin-bottom:5px;"></div>'
+  +'<div style="font-family:\'Press Start 2P\',monospace;color:#777;font-size:6px;margin-bottom:3px;">PRESENTS</div>'
+  +'<div style="font-family:\'Press Start 2P\',monospace;font-size:18px;color:#ff6600;text-shadow:2px 2px #000,0 0 22px #ff4400;margin-bottom:2px;">STAND-UP</div>'
+  +'<div style="font-family:\'Press Start 2P\',monospace;font-size:24px;color:#ffcc00;text-shadow:3px 3px #000,0 0 32px #ffaa00;margin-bottom:7px;">KING!</div>'
+  +'<div style="height:2px;background:linear-gradient(90deg,transparent,#ffcc00,transparent);margin-bottom:7px;"></div>'
+  +'<div style="width:100%;height:138px;border:2px solid #1a1a2a;overflow:hidden;margin-bottom:9px;position:relative;">'+stg('laughing',false,null,'',null)+'</div>'
+  +'<button id="btnCustom" style="width:100%;background:'+(hc?'#1a3a1a':'#0d0d1a')+';color:'+(hc?'#44ff88':'#6688cc')+';font-family:\'Press Start 2P\',monospace;border:2px solid '+(hc?'#44ff88':'#2244aa')+';padding:9px 8px;font-size:6.5px;cursor:pointer;margin-bottom:7px;box-shadow:'+(hc?'0 0 8px rgba(50,255,100,.2)':'none')+';">'
+  +(hc?'✍ LOADED: "'+S.customJoke.substring(0,20)+'..."':'✍ WRITE YOUR OWN JOKE')+'</button>'
+  +'<div style="font-family:\'Press Start 2P\',monospace;font-size:4px;color:#2a2a2a;margin-bottom:9px;">ARROWS=ACTION · E=EDGY · J=YOUR JOKE · R=EVENT · H=HECKLER</div>'
+  +'<button id="btnStart" style="width:100%;background:#cc0000;color:#fff;font-family:\'Press Start 2P\',monospace;border:3px solid #ffcc00;padding:13px 8px;font-size:11px;cursor:pointer;box-shadow:4px 4px 0 #770000,0 0 16px rgba(255,60,0,.3);">▶ TAKE THE STAGE</button>'
+  +'<div style="font-family:\'Press Start 2P\',monospace;color:#1a1a1a;font-size:4px;margin-top:7px;">ENGAGEMENT HITS 0 = SHOW OVER</div>'
+  +'</div></div>';
+}
+
+function sGame(){
+  var laugh=S.laugh,engage=S.engage,sc=S.score,stars=S.stars;
+  var jk=S.jokes,eu=S.eu,t=S.timer,acting=S.acting,msg=S.msg,react=S.react,heck=S.heck,flash=S.flash,sa=S.sa,pm=S.penaltyMsg,ev=S.pendingEvent;
+  var lc=laugh>70?'#ffdd00':laugh>40?'#ff9900':'#ff4400';  // laugh bar colour
+  var streak=S.goodStreak,streakActive=S.streakActive;
+  var spd=Math.round((0.25+engage/100*1.5)*100); // same as mult
+  var ec=engage>60?'#44aaff':engage>30?'#aa66ff':'#ff3333'; // engage bar colour
+  var tc2=t<=3?'#ff3333':t<=5?'#ffaa00':'#55dd55';
+  var mult=Math.round((0.25+engage/100*1.5)*100);
+  var canEnd=jk>=5,hasCb=S.jokeLog.length>0;
+  var hasCustom=!!S.customJoke;
+  var dE,dL1,dL2,dSub,dSp,dCe;
+  if(!heck){
+    if(canEnd){dE='🎤';dL1='END';dL2='SHOW';dSub='cash out!';dSp=false;dCe=true;}
+    else if(hasCb){dE='🔁';dL1='CALL-';dL2='BACK';dSub='ref earlier joke';dSp=false;dCe=false;}
+    else{dE='😅';dL1='STALL';dL2='';dSub='-5 engagement';dSp=false;dCe=false;}
+  }
+  // Cold crowd indicator for early rounds
+  var coldCrowd=S.round<2;
+
+  return '<div style="width:100%;height:100vh;display:flex;flex-direction:column;background:#000;overflow:hidden;">'
+  +'<div style="height:38%;flex-shrink:0;position:relative;">'+stg(react,heck,sa,msg,flash,streakActive,streak)+'</div>'
+  // PENALTY / INFO BAR
+  +(pm?'<div style="flex-shrink:0;background:#1a0000;border-top:2px solid #ff2222;border-bottom:2px solid #ff2222;padding:3px;text-align:center;"><span style="font-family:\'Press Start 2P\',monospace;color:#ff4444;font-size:6px;">⚠ '+pm+' ⚠</span></div>':'')
+  +(coldCrowd&&!pm?'<div style="flex-shrink:0;background:#0d0d00;border-top:1px solid #2a2a00;border-bottom:1px solid #2a2a00;padding:3px;text-align:center;"><span style="font-family:\'Press Start 2P\',monospace;color:#888800;font-size:5.5px;">❄ COLD CROWD — ROUND '+(S.round+1)+'/2 · JOKES LESS EFFECTIVE</span></div>':'')
+  // HUD — dual meters
+  +'<div style="flex-shrink:0;background:#020208;border-top:3px solid #0f0f1e;padding:4px 10px 5px;">'
+  // LAUGH METER row
+  +'<div style="display:flex;align-items:center;gap:7px;margin-bottom:4px;">'
+  +'<div style="font-family:\'Press Start 2P\',monospace;color:#ffcc00;font-size:5.5px;width:52px;flex-shrink:0;line-height:1.5;">LAUGH<br>METER</div>'
+  +'<div style="flex:1;height:13px;background:#1a1000;border:2px solid #3a2a00;overflow:hidden;position:relative;">'
+  +'<div style="width:'+laugh+'%;height:100%;background:'+lc+';transition:width .28s,background .28s;box-shadow:0 0 6px '+lc+'88;"></div>'
+  +'<div style="position:absolute;inset:0;background:repeating-linear-gradient(90deg,transparent,transparent 8px,rgba(0,0,0,.2) 8px,rgba(0,0,0,.2) 9px);pointer-events:none;"></div>'
+  +'</div>'
+  +'<div style="font-family:\'Press Start 2P\',monospace;color:'+lc+';font-size:9px;width:26px;text-align:right;">'+laugh+'</div>'
+  +'<div style="font-family:\'Press Start 2P\',monospace;color:#ffdd00;font-size:8px;width:24px;text-align:right;">★'+stars+'</div>'
+  +'</div>'
+  // ENGAGE METER row
+  +'<div style="display:flex;align-items:center;gap:7px;">'
+  +'<div style="font-family:\'Press Start 2P\',monospace;color:#88aaff;font-size:5.5px;width:52px;flex-shrink:0;line-height:1.5;">ENGAGE<br>'+mult+'%×</div>'
+  +'<div style="flex:1;height:13px;background:#0a0a18;border:2px solid #1a1a38;overflow:hidden;position:relative;">'
+  +'<div style="width:'+engage+'%;height:100%;background:'+ec+';transition:width .28s,background .28s;box-shadow:0 0 6px '+ec+'88;"></div>'
+  +'<div style="position:absolute;inset:0;background:repeating-linear-gradient(90deg,transparent,transparent 8px,rgba(0,0,0,.2) 8px,rgba(0,0,0,.2) 9px);pointer-events:none;"></div>'
+  +'</div>'
+  +'<div style="font-family:\'Press Start 2P\',monospace;color:'+ec+';font-size:9px;width:26px;text-align:right;">'+engage+'</div>'
+  +(!heck?'<div style="font-family:\'Press Start 2P\',monospace;color:'+tc2+';font-size:12px;width:24px;text-align:right;'+(t<=3?'animation:timerPulse .38s infinite;':'')+'">'+( t<10?'0':'')+t+'</div>'
+    :'<div style="font-family:\'Press Start 2P\',monospace;color:#ff3030;font-size:11px;width:24px;text-align:center;animation:blink .45s infinite;">!!</div>')
+  +'</div>'
+  +'</div>'
+  // CONTROLS
+  +'<div style="flex:1;min-height:0;background:#04040e;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:5px 5px 3px;gap:4px;position:relative;overflow:hidden;">'
+  +'<div style="position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 32px,rgba(255,255,255,.012) 32px,rgba(255,255,255,.012) 33px),repeating-linear-gradient(90deg,transparent,transparent 32px,rgba(255,255,255,.012) 32px,rgba(255,255,255,.012) 33px);pointer-events:none;"></div>'
+  // HINT PANEL
+  +(S.hint&&!heck&&!S.needsPee?'<div style="width:100%;flex-shrink:0;background:#001a10;border:2px solid #22aa55;border-radius:8px;padding:6px 12px;display:flex;align-items:center;gap:10px;">'
+  +'<div style="font-size:18px;">💡</div>'
+  +'<div style="flex:1;"><div style="font-family:\'Press Start 2P\',monospace;color:#44cc66;font-size:7px;margin-bottom:2px;">HINT</div>'
+  +'<div style="font-family:\'Press Start 2P\',monospace;color:#88ee99;font-size:6px;line-height:1.6;">'+S.hint.text+'</div></div>'
+  +'<div style="font-family:\'Press Start 2P\',monospace;color:#22aa44;font-size:5.5px;text-align:right;line-height:1.7;white-space:nowrap;">→ TRY:<br>'+S.hint.action.toUpperCase()+'</div>'
+  +'</div>':'')
+  // PEE BANNER
+  +(S.needsPee?'<div style="width:100%;flex-shrink:0;background:#1a0a00;border:3px solid #ffaa00;border-radius:8px;padding:6px 12px;display:flex;align-items:center;gap:10px;animation:pop .6s infinite;">'
+  +'<div style="font-size:22px;">🚽</div>'
+  +'<div style="flex:1;"><div style="font-family:\'Press Start 2P\',monospace;color:#ffcc00;font-size:7.5px;line-height:1.5;">NATURE IS CALLING</div>'
+  +'<div style="font-family:\'Press Start 2P\',monospace;color:#ff8800;font-size:5.5px;margin-top:2px;">'+(S.peeCountdown)+' MOVE'+(S.peeCountdown===1?'':'S')+' LEFT OR ELSE...</div></div>'
+  +'<div id="btnPeeLeave" style="background:#663300;border:2px solid #ffaa00;border-radius:6px;padding:6px 10px;cursor:pointer;font-family:\'Press Start 2P\',monospace;font-size:6px;color:#ffcc00;white-space:nowrap;">LEAVE<br>STAGE</div>'
+  +'</div>':'')
+  // RANDOM EVENT PANEL
+  +(ev&&!heck?'<div id="btnEvent" style="width:100%;flex-shrink:0;background:#1a1200;border:3px solid #ffbb00;border-radius:8px;padding:6px 12px;cursor:pointer;display:flex;align-items:center;gap:10px;animation:eventPulse 1.2s infinite;z-index:5;">'
+  +'<div style="font-size:22px;">'+ev.emoji+'</div>'
+  +'<div style="flex:1;">'
+  +'<div style="font-family:\'Press Start 2P\',monospace;color:#ffcc00;font-size:6.5px;">★ RANDOM EVENT!</div>'
+  +'<div style="font-family:\'Press Start 2P\',monospace;color:#ffee88;font-size:8.5px;margin-top:2px;">'+ev.name.toUpperCase()+'</div>'
+  +'</div>'
+  +'<div style="font-family:\'Press Start 2P\',monospace;color:#ffaa00;font-size:6px;text-align:right;line-height:1.7;">CLICK<br>[R]</div>'
+  +'</div>':'')
+  // DPAD + SIDE BUTTONS
+  +(heck?
+  '<div style="flex:1;display:flex;align-items:center;justify-content:center;width:100%;">'
+  +'<div style="position:relative;width:390px;height:370px;">'
+  +'<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:125px;height:125px;background:#1a0000;border:4px solid #aa1111;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:4px;z-index:2;"><div style="font-size:28px;">💥</div><div style="font-family:\'Press Start 2P\',monospace;font-size:7px;color:#ff3333;text-align:center;">ANY<br>ARROW</div></div>'
+  +['up','down','left','right'].map(function(d){var a={up:'▲',down:'▼',left:'◀',right:'▶'}[d];var p={up:'top:0;left:50%;transform:translateX(-50%);',down:'bottom:0;left:50%;transform:translateX(-50%);',left:'top:50%;left:0;transform:translateY(-50%);',right:'top:50%;right:0;transform:translateY(-50%);'}[d];return '<div id="dp_'+d+'" style="position:absolute;'+p+'width:128px;height:118px;background:#4a0000;border:4px solid #ff2222;border-radius:10px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;animation:pop .6s infinite;box-shadow:0 0 18px rgba(255,0,0,.5);"><div style="font-size:24px;">🗣️</div><div style="font-family:\'Press Start 2P\',monospace;font-size:12px;color:#ff6666;">'+a+'</div><div style="font-family:\'Press Start 2P\',monospace;font-size:9px;color:#ff9999;text-align:center;line-height:1.5;">INSULT<br>HECKLER</div></div>';}).join('')
+  +'</div></div>'
+  :
+  '<div style="flex:1;display:flex;align-items:center;justify-content:center;gap:5px;width:100%;">'
+  // DPAD
+  +'<div style="position:relative;width:390px;height:370px;flex-shrink:0;">'
+  +'<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:125px;height:125px;background:#0c0c1e;border:4px solid #2a2a5a;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:3px;z-index:2;"><div style="font-size:22px;">🎤</div><div style="font-family:\'Press Start 2P\',monospace;font-size:5px;color:#3a3a6a;text-align:center;">PICK<br>ACTION</div></div>'
+  +dpBtn('up','😂','CLASSIC','JOKE','may bomb!',acting,false,false)
+  +dpBtn('left','👥','CROWD','WORK','crowd pleaser',acting,false,false)
+  +dpBtn('right','⚡','ONE','LINER','quick & risky',acting,false,false)
+  +dpBtn('down',dE,dL1,dL2,dSub,acting&&!canEnd,dSp,dCe)
+  +'</div>'
+  // SIDE BUTTONS COLUMN
+  +'<div style="display:flex;flex-direction:column;gap:6px;align-self:stretch;justify-content:center;">'
+  // EDGY BUTTON
+  +'<div id="btnEdgy" style="width:96px;flex:1;background:'+(eu?'#080808':'#3a1000')+';border:4px solid '+(eu?'#181818':'#ff6200')+';border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:'+(acting||eu?'default':'pointer')+(eu?'':';animation:edgyGlow 1.4s infinite')+';">'
+  +'<div style="font-size:24px;">🔥</div>'
+  +'<div style="font-family:\'Press Start 2P\',monospace;font-size:8.5px;color:'+(eu?'#222':'#ff8833')+';text-align:center;line-height:1.6;">'+(eu?'EDGY<br>USED':'EDGY<br>JOKE')+'</div>'
+  +'<div style="font-family:\'Press Start 2P\',monospace;font-size:4.5px;color:'+(eu?'#151515':'#ff5500')+';text-align:center;line-height:1.5;">'+(eu?'spent':'1× use<br>[E]')+'</div>'
+  +'</div>'
+  // YOUR JOKE BUTTON
+  +(hasCustom?'<div id="btnCustomJoke" style="width:96px;flex:1;background:#0a1a2a;border:4px solid #44aaff;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:'+(acting?'default':'pointer')+';animation:jGlow 1.6s infinite;">'
+  +'<div style="font-size:24px;">✍️</div>'
+  +'<div style="font-family:\'Press Start 2P\',monospace;font-size:8.5px;color:#88ccff;text-align:center;line-height:1.6;">YOUR<br>JOKE</div>'
+  +'<div style="font-family:\'Press Start 2P\',monospace;font-size:4.5px;color:#4488aa;text-align:center;line-height:1.5;">BIG SWING<br>[J]</div>'
+  +'</div>'
+  :'<div style="width:96px;flex:1;background:#0d0d0d;border:4px solid #1a1a1a;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;opacity:.2;">'
+  +'<div style="font-size:24px;">✍️</div>'
+  +'<div style="font-family:\'Press Start 2P\',monospace;font-size:7px;color:#222;text-align:center;line-height:1.6;">NO JOKE<br>LOADED</div>'
+  +'<div style="font-family:\'Press Start 2P\',monospace;font-size:4px;color:#111;text-align:center;">write one<br>on start screen</div>'
+  +'</div>')
+  +'</div>'
+  +'</div>'
+  )
+  // IMPROV BUTTON — only when laugh is low (<30)
+  +(laugh<30&&!heck?'<div style="width:100%;padding:0 5px;flex-shrink:0;margin-top:4px;"><div id="btnImprov" style="width:100%;background:#220022;border:3px solid #cc44cc;border-radius:8px;padding:7px 10px;cursor:'+(acting?'default':'pointer')+';display:flex;align-items:center;gap:10px;box-shadow:0 0 12px rgba(180,50,180,.4);animation:pop .8s infinite;"><div style="font-size:22px;">🎲</div><div style="flex:1;"><div style="font-family:\'Press Start 2P\',monospace;color:#dd88ff;font-size:9px;line-height:1.5;">IMPROV</div><div style="font-family:\'Press Start 2P\',monospace;color:#996699;font-size:5.5px;margin-top:2px;">BIG SWING · BOOM OR BUST [I]</div></div></div></div>':'')
+  // STATS FOOTER
+  +'<div style="flex-shrink:0;width:100%;display:flex;gap:10px;align-items:center;padding:0 4px;">'
+  +'<div style="font-family:\'Press Start 2P\',monospace;color:#2a2a44;font-size:5.5px;">JOKES: <span style="color:#6666aa;">'+jk+'</span>/5</div>'
+  +'<div style="font-family:\'Press Start 2P\',monospace;color:#3a2800;font-size:5px;">SCR: <span style="color:#aaaa22;">'+sc+'</span></div>'
+  +(hasCb?'<div style="font-family:\'Press Start 2P\',monospace;color:#2a3a6a;font-size:5px;">↩ CALLBACK</div>':'')
+  +(hasCustom?'<div style="font-family:\'Press Start 2P\',monospace;color:#1a3a4a;font-size:5px;">✍ [J]=YOUR JOKE</div>':'')
+  +(streakActive?'<div style="font-family:\'Press Start 2P\',monospace;color:#ff8800;font-size:6px;animation:pop .5s infinite;">🔥 STREAK x'+streak+'!</div>':'')
+  +(canEnd&&!heck?'<div style="font-family:\'Press Start 2P\',monospace;color:#44ff88;font-size:5.5px;animation:pop 1.2s infinite;margin-left:auto;">★ ▼ END</div>':'')
+  +'</div>'
+  +'</div>'
+  +'</div>';
+}
+
+function sReview(){
+  var total=S.score+S.laugh,g=S.grade,rv=S.review,log=S.log;
+  var gc={S:'#ffff44',A:'#44ff88',B:'#44aaff',C:'#ffaa00',D:'#ff6600',F:'#ff2222'}[g];
+  return '<div style="width:100%;height:100vh;background:#000;display:flex;align-items:center;justify-content:center;padding:12px;overflow-y:auto;">'
+  +'<div style="max-width:348px;width:100%;background:#06000b;border:4px solid #ffcc00;padding:18px;text-align:center;box-shadow:0 0 50px #aa5500;">'
+  +'<div style="font-family:\'Press Start 2P\',monospace;color:#ffcc00;font-size:9px;margin-bottom:12px;">★  SHOW REVIEW  ★</div>'
+  +'<div style="font-family:\'Press Start 2P\',monospace;font-size:64px;color:'+gc+';text-shadow:0 0 30px '+gc+',0 0 60px '+gc+'55;margin-bottom:5px;">'+g+'</div>'
+  +'<div style="font-family:\'Press Start 2P\',monospace;color:#555;font-size:6px;margin-bottom:5px;">SCORE: '+(total)+' pts · ★'+S.stars+' STARS</div>'
+  +'<div style="font-family:\'Press Start 2P\',monospace;color:#3a3a3a;font-size:5.5px;margin-bottom:12px;">LAUGH: '+S.laugh+' · ENGAGE: '+S.engage+'</div>'
+  +'<div style="display:flex;gap:12px;align-items:flex-start;background:#0e0e0e;border:2px solid #1a1a1a;padding:12px;margin-bottom:14px;text-align:left;">'
+  +'<div style="position:relative;width:38px;height:62px;flex-shrink:0;">'
+  +'<div style="position:absolute;top:0;left:10px;width:18px;height:5px;background:#1a1a1a;"></div>'
+  +'<div style="position:absolute;top:4px;left:9px;width:20px;height:18px;background:#c68642;border:2px solid #8a5a2a;"></div>'
+  +'<div style="position:absolute;top:7px;left:9px;width:20px;height:6px;background:#444;"></div>'
+  +'<div style="position:absolute;top:21px;left:5px;width:28px;height:26px;background:#1a1a1a;border:2px solid #2a2a2a;"></div>'
+  +'<div style="position:absolute;top:25px;left:15px;width:8px;height:18px;background:#aa0000;border:1px solid #880000;"></div>'
+  +'<div style="position:absolute;top:47px;left:6px;width:11px;height:15px;background:#111;border:1px solid #222;"></div>'
+  +'<div style="position:absolute;top:47px;left:21px;width:11px;height:15px;background:#111;border:1px solid #222;"></div>'
+  +'</div>'
+  +'<div style="flex:1;">'
+  +'<div style="font-family:\'Press Start 2P\',monospace;color:#ffcc00;font-size:6px;margin-bottom:6px;">CLUB MANAGER:</div>'
+  +'<div style="font-family:\'Press Start 2P\',monospace;color:#ddd;font-size:6.5px;line-height:2.1;white-space:pre-line;">'+rv+'</div>'
+  +'</div></div>'
+  +'<div style="border:2px solid #131313;padding:8px;margin-bottom:14px;text-align:left;max-height:100px;overflow-y:auto;">'
+  +'<div style="font-family:\'Press Start 2P\',monospace;color:#ffcc00;font-size:5.5px;margin-bottom:5px;">PERFORMANCE LOG:</div>'
+  +(log.length===0?'<div style="font-family:\'Press Start 2P\',monospace;color:#222;font-size:5.5px;">No actions taken.</div>':
+    log.map(function(e,i){var eff=e.ld||e.delta||0;return '<div style="font-family:\'Press Start 2P\',monospace;color:'+(eff>=0?'#44ff88':'#ff4444')+';font-size:5px;margin-bottom:3px;">#'+(i+1)+' '+String(e.action).toUpperCase()+' L:'+(eff>=0?'+':'')+eff+(e.ed!==undefined?' E:'+(e.ed>=0?'+':'')+e.ed:'')+' →😄'+e.laugh+'</div>';}).join('')
+  )+'</div>'
+  +'<button id="btnAgain" style="width:100%;background:#cc0000;color:#fff;font-family:\'Press Start 2P\',monospace;border:3px solid #ffcc00;padding:13px;font-size:10px;cursor:pointer;box-shadow:4px 4px 0 #880000;">↩  PLAY AGAIN</button>'
+  +'</div></div>';
+}
+
+// ════════════ EVENTS ════════════
+function handleDir(dir){
+  if(S.screen!=='game'||S.acting)return;
+  if(S.heck){doAct('heckler');return;}
+  S.pressed=dir;render();setTimeout(function(){S.pressed=null;},160);
+  if(dir==='up')doAct('joke');
+  else if(dir==='left')doAct('crowd');
+  else if(dir==='right')doAct('oneliner');
+  else if(dir==='down'){
+    if(S.jokes>=5)doAct('end');
+    else if(S.jokeLog.length>0)doAct('callback');
+    else doAct('stall');
+  }
+}
+function saveJoke(){
+  var ji=document.getElementById('jokeInput');
+  if(ji&&ji.value.trim().length>0)S.customJoke=ji.value.trim().substring(0,40);
+  S.showCustomInput=false;render();
+}
+function bind(){
+  var s=document.getElementById('btnStart');if(s)s.onclick=startGame;
+  var a=document.getElementById('btnAgain');if(a)a.onclick=function(){S.screen='start';render();};
+  var c=document.getElementById('btnCustom');if(c)c.onclick=function(){S.showCustomInput=true;render();};
+  ['up','down','left','right'].forEach(function(dir){var el=document.getElementById('dp_'+dir);if(el)el.onclick=function(){handleDir(dir);};});
+  var be=document.getElementById('btnEdgy');if(be)be.onclick=function(){if(!S.acting&&!S.eu&&!S.heck)doAct('edgy');};
+  var bj=document.getElementById('btnCustomJoke');if(bj)bj.onclick=function(){if(!S.acting&&!S.heck&&S.customJoke)doAct('custom_joke');};
+  var ev=document.getElementById('btnEvent');if(ev)ev.onclick=function(){if(!S.acting&&S.pendingEvent&&!S.heck)doAct('event');};
+  var ji=document.getElementById('jokeInput');
+  if(ji){
+    ji.focus();
+    var jcc=document.getElementById('jcc');
+    ji.addEventListener('input',function(){if(jcc)jcc.textContent=ji.value.length+' / 40';});
+    ji.addEventListener('keydown',function(e){if(e.key==='Enter')saveJoke();if(e.key==='Escape'){S.showCustomInput=false;render();}});
+  }
+  // Special screen button
+  var bsp=document.getElementById('btnSpecial');
+  if(bsp)bsp.onclick=function(){
+    var action=bsp.getAttribute('data-action');
+    if(action==='win'){S.specialScreen=null;S.laugh=100;S.score+=200;S.stars+=5;endGame();}
+    else if(action==='lose'){S.specialScreen=null;S.engage=0;endGame();}
+    else{S.specialScreen=null;render();if(!S.acting)startTmr();}
+  };
+  // PEE LEAVE button
+  var bpee=document.getElementById('btnPeeLeave');
+  if(bpee)bpee.onclick=function(){if(!S.acting)doAct('pee_leave');};
+  var bsp2=document.getElementById('btnImprov');
+  if(bsp2)bsp2.onclick=function(){if(!S.acting&&!S.heck)doAct('improv');};
+  var bs=document.getElementById('btnSave');if(bs)bs.onclick=saveJoke;
+  var bc=document.getElementById('btnCancel');if(bc)bc.onclick=function(){S.showCustomInput=false;render();};
+}
+
+document.addEventListener('keydown',function(e){
+  if(S.screen!=='game')return;
+  var m={ArrowUp:'up',ArrowDown:'down',ArrowLeft:'left',ArrowRight:'right'};
+  var w={w:'up',s:'down',a:'left',d:'right'};
+  var dir=m[e.key]||w[e.key.toLowerCase()];
+  if(dir){e.preventDefault();handleDir(dir);return;}
+  var k=e.key.toLowerCase();
+  if(k==='e'&&!S.acting&&!S.eu&&!S.heck){e.preventDefault();doAct('edgy');}
+  else if(k==='j'&&!S.acting&&!S.heck&&S.customJoke){e.preventDefault();doAct('custom_joke');}
+  else if(k==='r'&&S.pendingEvent&&!S.acting&&!S.heck){e.preventDefault();doAct('event');}
+  else if(k==='i'&&!S.acting&&!S.heck&&S.laugh<30){e.preventDefault();doAct('improv');}
+  else if(k==='p'&&S.needsPee&&!S.acting){e.preventDefault();doAct('pee_leave');}
+  else if(k==='h'&&!S.heck&&!S.heckPending){
+    e.preventDefault();
+    S.heckPending=true;
+    S.penaltyMsg='HECKLER INCOMING...';
+    clearTimeout(S.penaltyT);
+    S.penaltyT=setTimeout(function(){S.penaltyMsg='';render();},2000);
+    render();
+  }
+});
+
+render();
+</script>
+</body>
+</html>
