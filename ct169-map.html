@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>We Ran CT 169 – Interactive Map</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Barlow', sans-serif;
+      background: #0f172a;
+      overflow: hidden;
+    }
+
+    #map {
+      width: 100vw;
+      height: 100vh;
+    }
+
+    /* ── Legend / Info Panel ── */
+    .panel {
+      position: absolute;
+      top: 14px;
+      left: 14px;
+      z-index: 1000;
+      background: rgba(15, 23, 42, 0.92);
+      border: 1px solid rgba(255,255,255,0.08);
+      backdrop-filter: blur(12px);
+      border-radius: 10px;
+      padding: 14px 18px;
+      color: #e2e8f0;
+      min-width: 190px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+    }
+
+    .panel-title {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 17px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: #f1f5f9;
+      margin-bottom: 10px;
+      line-height: 1.2;
+    }
+
+    .panel-sub {
+      font-size: 11px;
+      color: #94a3b8;
+      margin-bottom: 12px;
+      line-height: 1.4;
+    }
+
+    .legend-row {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      margin: 5px 0;
+      font-size: 12px;
+      color: #cbd5e1;
+    }
+
+    .swatch {
+      width: 13px;
+      height: 13px;
+      border-radius: 3px;
+      flex-shrink: 0;
+    }
+
+    .count-badge {
+      display: inline-block;
+      margin-left: auto;
+      background: rgba(255,255,255,0.07);
+      border-radius: 99px;
+      padding: 1px 7px;
+      font-size: 11px;
+      color: #94a3b8;
+    }
+
+    .divider {
+      border: none;
+      border-top: 1px solid rgba(255,255,255,0.07);
+      margin: 10px 0;
+    }
+
+    .hint {
+      font-size: 11px;
+      color: #64748b;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    /* ── Tooltip ── */
+    .leaflet-tooltip.town-tip {
+      background: rgba(15, 23, 42, 0.95);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 7px;
+      padding: 8px 12px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+      color: #f1f5f9;
+      font-family: 'Barlow', sans-serif;
+      font-size: 13px;
+      pointer-events: none;
+    }
+
+    .leaflet-tooltip.town-tip::before {
+      display: none;
+    }
+
+    .tip-name {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      color: #f8fafc;
+    }
+
+    .tip-action {
+      font-size: 11px;
+      margin-top: 3px;
+    }
+
+    .tip-action.live { color: #34d399; }
+    .tip-action.soon { color: #64748b; }
+
+    /* ── Loading overlay ── */
+    #loader {
+      position: absolute;
+      inset: 0;
+      z-index: 2000;
+      background: #0f172a;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      color: #94a3b8;
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 18px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      transition: opacity 0.5s;
+    }
+
+    .spinner {
+      width: 36px;
+      height: 36px;
+      border: 3px solid rgba(255,255,255,0.08);
+      border-top-color: #34d399;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+<div id="loader">
+  <div class="spinner"></div>
+  Loading the map…
+</div>
+
+<div id="map"></div>
+
+<div class="panel">
+  <div class="panel-title">We Ran This State</div>
+  <div class="panel-sub">169 towns · 169 races · Connecticut</div>
+
+  <div class="legend-row">
+    <div class="swatch" style="background:#34d399;"></div>
+    Page live
+    <span class="count-badge" id="live-count">–</span>
+  </div>
+  <div class="legend-row">
+    <div class="swatch" style="background:#334155;"></div>
+    Coming soon
+    <span class="count-badge" id="soon-count">–</span>
+  </div>
+
+  <hr class="divider"/>
+  <div class="hint">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+    Click any town to read
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+window.addEventListener('load', function() {
+// ============================================================
+//  TOWN PAGES
+//  Add entries here as new pages go live on your site.
+//  Format: "Town Name": "town-NUMBER-url-slug"
+// ============================================================
+const PUBLISHED = {
+  "Manchester":       "town-1-manchester",
+  "Madison":          "town-2-madison",
+  "East Hampton":     "town-3-east-hampton",
+  "Glastonbury":      "town-4-glastonbury",
+  "West Hartford":    "town-5-west-hartford",
+  "Haddam":           "town-6-haddam",
+  "Cromwell":         "town-7-cromwell",
+  "East Windsor":     "town-8-east-windsor",
+  "Ellington":        "town-9-ellington",
+  "Farmington":       "town-10-farmington",
+  "Trumbull":         "town-11-trumbull",
+  "Bristol":          "town-12-bristol",
+  "Berlin":           "town-13-berlin",
+  "Woodstock":        "town-14-woodstock",
+  "Colchester":       "town-15-colchester",
+  "South Windsor":    "town-16-south-windsor",
+  "Meriden":          "town-17-meriden",
+  "East Granby":      "town-18-east-granby",
+  "East Hartford":    "town-19-east-hartford",
+  "New Haven":        "town-20-new-haven",
+  "Stratford":        "town-21-stratford",
+  "Washington":       "town-22-washington",
+  "Putnam":           "town-23-putnam",
+  "East Lyme":        "town-24-east-lyme",
+  "Westbrook":        "town-25-westbrook",
+  "Lyme":             "town-26-lyme",
+  "Woodbury":         "town-27-woodbury",
+  "Salem":            "town-28-salem",
+  "Derby":            "town-29-derby",
+  "Union":            "town-30-union",
+  "Burlington":       "town-31-burlington",
+  "Bethany":          "town-32-bethany",
+  "Franklin":         "town-33-franklin",
+  "Rocky Hill":       "town-34-rocky-hill",
+  "Willington":       "town-35-willington",
+  "Simsbury":         "town-36-simsbury",
+  "Ledyard":          "town-37-ledyard",
+  "Bridgeport":       "town-38-bridgeport",
+  "Hebron":           "town-39-hebron",
+  "Portland":         "town-40-portland",
+  "Bolton":           "town-41-bolton",
+  "Windham":          "town-42-windham",
+  "Suffield":         "town-43-suffield",
+  "Newington":        "town-44-newington",
+  "Plainville":       "town-45-plainville",
+  "Durham":           "town-46-durham",
+  "Hamden":           "town-47-hamden",
+  "Ashford":          "town-48-ashford",
+  "Old Lyme":         "town-49-old-lyme",
+  "North Branford":   "town-50-north-branford",
+  "Prospect":         "town-51-prospect",
+  "Norwich":          "town-52-norwich",
+  "Brookfield":       "town-53-brookfield",
+  "North Stonington": "town-54-north-stonington",
+  "Canton":           "town-55-canton",
+  "Roxbury":          "town-56-roxbury",
+  "Plymouth":         "town-57-plymouth",
+  "Montville":        "town-58-montville",
+  "Deep River":       "town-59-deep-river",
+  "Bozrah":           "town-60-bozrah",
+  "Seymour":          "town-61-seymour",
+  "Clinton":          "town-62-clinton",
+  "Hartland":         "town-63-hartland",
+  "Cornwall":         "town-64-cornwall"
+  // ↑ ADD MORE HERE as pages go live ↑
+  // Example: "Guilford": "town-65-guilford",
+};
+
+const BASE   = "https://sites.google.com/view/weranct169/my-journey-to-169/";
+const MAIN   = "https://sites.google.com/view/weranct169/my-journey-to-169";
+
+function getUrl(name) {
+  return PUBLISHED[name] ? BASE + PUBLISHED[name] : MAIN;
+}
+
+// ── Map init ──────────────────────────────────────────────────
+const map = L.map('map', { zoomControl: false, attributionControl: false })
+             .setView([41.60, -72.70], 9);
+
+L.control.zoom({ position: 'bottomright' }).addTo(map);
+L.control.attribution({ position: 'bottomright', prefix: false })
+  .addAttribution('© <a href="https://openstreetmap.org">OSM</a> © <a href="https://carto.com">CARTO</a>')
+  .addTo(map);
+
+// Carto dark-matter basemap (no labels — we add our own)
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png', {
+  subdomains: 'abcd', maxZoom: 19
+}).addTo(map);
+
+// ── Styles ────────────────────────────────────────────────────
+function townStyle(feature) {
+  const live = !!PUBLISHED[getName(feature)];
+  return {
+    fillColor:   live ? '#34d399' : '#334155',
+    fillOpacity: live ? 0.55 : 0.35,
+    color:       live ? '#6ee7b7' : '#475569',
+    weight: 1.2
+  };
+}
+
+function hoverStyle(feature) {
+  const live = !!PUBLISHED[getName(feature)];
+  return {
+    fillColor:   live ? '#6ee7b7' : '#64748b',
+    fillOpacity: 0.85,
+    color:       '#fff',
+    weight: 2
+  };
+}
+
+function getName(feature) {
+  const p = feature.properties;
+  return p.NAME || p.name || p.TOWN || p.town_nm || p.TOWNNAME || p.town || '';
+}
+
+// ── GeoJSON layer ─────────────────────────────────────────────
+let geojsonLayer;
+
+function onEach(feature, layer) {
+  const name = getName(feature);
+  const live = !!PUBLISHED[name];
+
+  const tipHtml = `
+    <div class="tip-name">${name}</div>
+    <div class="tip-action ${live ? 'live' : 'soon'}">
+      ${live ? '↗ Read the race recap' : 'Write-up coming soon'}
+    </div>`;
+
+  layer.bindTooltip(tipHtml, {
+    className: 'town-tip',
+    sticky: true,
+    offset: [14, 0]
+  });
+
+  layer.on({
+    mouseover(e) { e.target.setStyle(hoverStyle(feature)); e.target.bringToFront(); },
+    mouseout(e)  { geojsonLayer.resetStyle(e.target); },
+    click()      { window.open(getUrl(name), '_blank'); }
+  });
+}
+
+// ── Fetch GeoJSON (try two sources) ──────────────────────────
+const GEOJSON_URLS = [
+  'https://raw.githubusercontent.com/CT-Data-Collaborative/ctgeo/master/towns.geojson',
+  'https://raw.githubusercontent.com/codeforamerica/click_that_hood/master/public/data/connecticut.geojson'
+];
+
+async function loadGeoJSON() {
+  for (const url of GEOJSON_URLS) {
+    try {
+      const r = await fetch(url);
+      if (!r.ok) continue;
+      const data = await r.json();
+
+      geojsonLayer = L.geoJSON(data, { style: townStyle, onEachFeature: onEach }).addTo(map);
+      map.fitBounds(geojsonLayer.getBounds(), { padding: [30, 30] });
+
+      // Update legend counts
+      const liveN = Object.keys(PUBLISHED).length;
+      let total = 0;
+      data.features.forEach(() => total++);
+      document.getElementById('live-count').textContent = liveN;
+      document.getElementById('soon-count').textContent = total - liveN;
+
+      // Hide loader
+      const loader = document.getElementById('loader');
+      loader.style.opacity = '0';
+      setTimeout(() => loader.remove(), 500);
+      return;
+    } catch(_) { /* try next */ }
+  }
+  // All sources failed
+  document.getElementById('loader').innerHTML =
+    '<div style="color:#f87171;font-size:14px;text-align:center;padding:20px">' +
+    'Could not load map data.<br>Check your internet connection and try again.</div>';
+}
+
+loadGeoJSON();
+}); // end window.onload
+</script>
+</body>
+</html>
